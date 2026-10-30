@@ -317,6 +317,7 @@ def scan(request: dict[str, Any]) -> dict[str, Any]:
                     "supportsPing": has_plugin(device_id, "kdeconnect_ping"),
                     "supportsRing": has_plugin(device_id, "kdeconnect_findmyphone"),
                     "supportsShare": has_plugin(device_id, "kdeconnect_share"),
+                    "supportsBrowse": has_plugin(device_id, "kdeconnect_sftp"),
                     "supportsText": dbus is not None and has_plugin(device_id, "kdeconnect_share"),
                 }
             )
@@ -369,6 +370,10 @@ def action(request: dict[str, Any]) -> dict[str, Any]:
             raise CommandFailure("file_missing")
         for path in paths:
             qdbus_call(base + "/share", "org.kde.kdeconnect.device.share.shareUrl", path.as_uri())
+    elif kind == "browse_files":
+        if not has_plugin(device_id, "kdeconnect_sftp"):
+            raise CommandFailure("browse_unsupported")
+        qdbus_call(base + "/sftp", "org.kde.kdeconnect.device.sftp.startBrowsing")
     elif kind == "share_text":
         if not has_plugin(device_id, "kdeconnect_share"):
             raise CommandFailure("text_unsupported")

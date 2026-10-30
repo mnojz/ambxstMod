@@ -2,7 +2,7 @@ diff --git a/translations/en.json b/translations/en.json
 index 208813c8..617e39ce 100644
 --- a/translations/en.json
 +++ b/translations/en.json
-@@ -855,5 +855,168 @@
+@@ -855,5 +855,169 @@
    "wifi.secured": "Secured",
    "wifi.title": "Wi-Fi",
    "wifi.tooltip_off": "Wi-Fi: Off",
@@ -107,6 +107,7 @@ index 208813c8..617e39ce 100644
 +  "kde_connect_helper.running": "Running",
 +  "kde_connect_helper.send": "Send",
 +  "kde_connect_helper.send_file": "Send files",
++  "kde_connect_helper.browse_files": "Browse in file explorer",
 +  "kde_connect_helper.share_text": "Share text",
 +  "kde_connect_helper.sharing": "Sharing",
 +  "kde_connect_helper.start_daemon": "Start KDE Connect",
@@ -176,7 +177,7 @@ diff --git a/translations/es.json b/translations/es.json
 index 4753da79..548da30f 100644
 --- a/translations/es.json
 +++ b/translations/es.json
-@@ -855,5 +855,168 @@
+@@ -855,5 +855,169 @@
    "wifi.secured": "Segura",
    "wifi.title": "Wi-Fi",
    "wifi.tooltip_off": "Wi-Fi: Desactivado",
@@ -281,6 +282,7 @@ index 4753da79..548da30f 100644
 +  "kde_connect_helper.running": "En ejecución",
 +  "kde_connect_helper.send": "Enviar",
 +  "kde_connect_helper.send_file": "Enviar archivos",
++  "kde_connect_helper.browse_files": "Explorar en el administrador de archivos",
 +  "kde_connect_helper.share_text": "Compartir texto",
 +  "kde_connect_helper.sharing": "Compartir",
 +  "kde_connect_helper.start_daemon": "Iniciar KDE Connect",
@@ -350,7 +352,7 @@ diff --git a/translations/ru.json b/translations/ru.json
 index 71b08528..c2bcfa07 100644
 --- a/translations/ru.json
 +++ b/translations/ru.json
-@@ -851,5 +851,168 @@
+@@ -851,5 +851,169 @@
    "wifi.secured": "Защищённая",
    "wifi.title": "Wi-Fi",
    "wifi.tooltip_off": "Wi-Fi: Выкл",
@@ -455,6 +457,7 @@ index 71b08528..c2bcfa07 100644
 +  "kde_connect_helper.running": "Работает",
 +  "kde_connect_helper.send": "Отправить",
 +  "kde_connect_helper.send_file": "Отправить файлы",
++  "kde_connect_helper.browse_files": "Открыть в диспетчере файлов",
 +  "kde_connect_helper.share_text": "Поделиться текстом",
 +  "kde_connect_helper.sharing": "Отправка данных",
 +  "kde_connect_helper.start_daemon": "Запустить KDE Connect",

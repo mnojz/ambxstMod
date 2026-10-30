@@ -15,6 +15,7 @@
       "supportsPing": false,
       "supportsRing": false,
       "supportsShare": false,
+      "supportsBrowse": false,
       "supportsText": false
     }
   ]

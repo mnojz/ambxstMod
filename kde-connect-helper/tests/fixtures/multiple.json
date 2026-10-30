@@ -15,6 +15,7 @@
       "supportsPing": true,
       "supportsRing": true,
       "supportsShare": true,
+      "supportsBrowse": true,
       "supportsText": true
     },
     {
@@ -28,6 +29,7 @@
       "supportsPing": true,
       "supportsRing": false,
       "supportsShare": true,
+      "supportsBrowse": true,
       "supportsText": true
     }
   ]

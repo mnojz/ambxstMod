@@ -141,6 +141,8 @@ Item {
             actions.push(I18n.t("kde_connect_helper.ring"));
         if (!device.supportsShare)
             actions.push(I18n.t("kde_connect_helper.send_file"));
+        if (!device.supportsBrowse)
+            actions.push(I18n.t("kde_connect_helper.browse_files"));
         return actions.join(", ");
     }
 
@@ -148,12 +150,13 @@ Item {
         id: control
         property string iconText: ""
         property string labelText: ""
+        property string tooltipText: ""
         property bool danger: false
         implicitHeight: 36
         leftPadding: control.labelText.length > 0 ? 8 : 0
         rightPadding: control.labelText.length > 0 ? 8 : 0
         activeFocusOnTab: true
-        Accessible.name: control.labelText.length > 0 ? control.labelText : control.iconText
+        Accessible.name: control.labelText.length > 0 ? control.labelText : (control.tooltipText.length > 0 ? control.tooltipText : control.iconText)
         background: StyledRect {
             id: helperButtonBackground
             variant: control.down || control.checked ? "primary" : (control.hovered || control.activeFocus ? "focus" : "common")
@@ -167,7 +170,7 @@ Item {
                 Layout.alignment: control.labelText.length === 0 ? Qt.AlignCenter : Qt.AlignVCenter
                 text: control.iconText
                 font.family: Icons.font
-                font.pixelSize: 16
+                font.pixelSize: control.labelText.length === 0 ? 18 : 16
                 color: helperButtonBackground.item
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
@@ -183,6 +186,10 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
+        }
+        StyledToolTip {
+            show: control.hovered && control.tooltipText.length > 0
+            tooltipText: control.tooltipText
         }
     }
 
@@ -340,6 +347,7 @@ Item {
         id: helperPopup
         anchorItem: buttonBackground
         bar: root.bar
+        popupPadding: 14
         // The scroll gutter widens the popup instead of narrowing its content
         readonly property real baseWidth: Math.max(280, Math.min(336, (root.bar?.screen?.width ?? 384) - 48 - root.scrollGutter))
         readonly property real neededHeight: Math.max(scrollArea.contentHeight,
@@ -374,7 +382,7 @@ Item {
             ColumnLayout {
                 id: popupColumn
                 width: scrollArea.width - (scrollArea.overflowing ? root.scrollGutter : 0)
-                spacing: 8
+                spacing: 10
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -554,8 +562,8 @@ Item {
                     RowLayout {
                         id: deviceRow
                         anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 10
+                        anchors.margins: 12
+                        spacing: 12
 
                         Text {
                             text: Icons.deviceMobile
@@ -625,7 +633,7 @@ Item {
                     }
                 }
 
-                // Quick Actions (Single Row)
+                // Quick Actions (Single Row, Equal Size, Icon Only)
                 Text {
                     visible: !!root.device
                     text: I18n.t("kde_connect_helper.quick_actions")
@@ -642,26 +650,42 @@ Item {
 
                     HelperButton {
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        implicitHeight: 38
                         iconText: Icons.paperPlane
-                        labelText: I18n.t("kde_connect_helper.ping")
+                        tooltipText: I18n.t("kde_connect_helper.ping")
                         enabled: !!root.device?.reachable && !!root.device?.supportsPing && !KdeConnectService.activeRequest
                         onClicked: KdeConnectService.runAction("ping")
                     }
 
                     HelperButton {
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        implicitHeight: 38
                         iconText: Icons.bellRinging
-                        labelText: I18n.t("kde_connect_helper.ring")
+                        tooltipText: I18n.t("kde_connect_helper.ring")
                         enabled: !!root.device?.reachable && !!root.device?.supportsRing && !KdeConnectService.activeRequest
                         onClicked: KdeConnectService.runAction("ring")
                     }
 
                     HelperButton {
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        implicitHeight: 38
                         iconText: Icons.file
-                        labelText: I18n.t("kde_connect_helper.send_file")
+                        tooltipText: I18n.t("kde_connect_helper.send_file")
                         enabled: !!root.device?.reachable && !!root.device?.supportsShare && !KdeConnectService.activeRequest
                         onClicked: KdeConnectService.chooseFiles(I18n.t("kde_connect_helper.choose_file"))
+                    }
+
+                    HelperButton {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        implicitHeight: 38
+                        iconText: Icons.folder
+                        tooltipText: I18n.t("kde_connect_helper.browse_files")
+                        enabled: !!root.device?.reachable && !!root.device?.supportsBrowse && !KdeConnectService.activeRequest
+                        onClicked: KdeConnectService.runAction("browse_files")
                     }
                 }
 

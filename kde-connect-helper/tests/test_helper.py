@@ -218,6 +218,19 @@ class HelperTests(unittest.TestCase):
                 })
         self.assertEqual(call.call_count, 2)
 
+    def test_browse_files_starts_sftp_browsing(self) -> None:
+        with mock.patch.object(helper, "daemon_running", return_value=True), mock.patch.object(
+            helper, "has_plugin", return_value=True
+        ), mock.patch.object(helper, "qdbus_call") as call:
+            helper.action({
+                "kind": "browse_files",
+                "deviceId": "valid-device-id",
+            })
+        call.assert_called_once_with(
+            "/modules/kdeconnect/devices/valid-device-id/sftp",
+            "org.kde.kdeconnect.device.sftp.startBrowsing",
+        )
+
 
 class PackageIntegrationTests(unittest.TestCase):
     def test_bar_widget_exports_loader_dimensions(self) -> None:
