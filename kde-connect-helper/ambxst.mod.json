@@ -1,14 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/Axenide/Ambxst/dev/docs/mods/manifest.schema.json",
   "manifestVersion": 1,
-  "id": "community.kde-connect-helper",
+  "id": "mnojz.kde-connect-helper",
   "name": "KDE Connect helper",
   "version": "1.0.10",
   "description": "Adds a KDE Connect status button, device actions, guided installation, and portable user autostart controls.",
   "license": "AGPL-3.0-only",
-  "author": "flathead",
-  "authorUrl": "https://github.com/flathead",
-  "homepage": "https://github.com/flathead/ambxst-mods/tree/main/packages/kde-connect-helper",
+  "author": "mnojz",
+  "authorUrl": "https://github.com/mnojz",
+  "homepage": "https://github.com/mnojz/ambxstMod/tree/main/kde-connect-helper",
   "compatibility": {
     "api": 1,
     "ambxst": ">=1.3.8 <1.4.0",

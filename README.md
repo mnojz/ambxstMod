@@ -15,10 +15,7 @@ A collection of mods for [Ambxst](https://github.com/Axenide/Ambxst), a modular 
 * **Features**: Wayland overlay layer shell, multi-monitor support, configurable selection fill and border colors, border width, and corner radius via Ambxst mod settings.
 
 ### 3. [KDE Connect Helper (`kde-connect-helper`)](./kde-connect-helper)
-* **ID**: `community.kde-connect-helper`
+* **ID**: `mnojz.kde-connect-helper`
 * **Description**: Status bar control and actions for paired KDE Connect devices.
 * **Features**: Device status, battery levels, ping/ring actions, file/text sharing via desktop portal, and user autostart controls.
 
-## License
-
-Each mod maintains its own respective licensing and documentation inside its directory.

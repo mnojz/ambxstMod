@@ -3,10 +3,21 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Test & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
 # Log files
 *.log
 
-# Operating system / Editor files
+# Editor and Qt tooling scratch files
+.qmlls.ini
+*.qmlls.ini
+*.orig
+*.rej
+*.bak
 .DS_Store
 Thumbs.db
 .idea/
@@ -14,3 +25,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Notes
+HANDOFF.md

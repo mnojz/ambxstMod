@@ -4,7 +4,9 @@
   "id": "mnojz.dragoverlay",
   "name": "Rubber Band Selection Overlay",
   "version": "1.1.0",
-  "author": "Manoj Joshi",
+  "author": "mnojz",
+  "authorUrl": "https://github.com/mnojz",
+  "homepage": "https://github.com/mnojz/ambxstMod/tree/main/rubberBandSelectionOverlay",
   "description": "Ambxst mod for creating a rubber band selection overlay for spawning terminals over the desktop",
   "compatibility": {
     "api": 1,

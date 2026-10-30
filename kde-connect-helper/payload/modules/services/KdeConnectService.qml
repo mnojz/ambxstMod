@@ -7,7 +7,7 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    readonly property string modId: "community.kde-connect-helper"
+    readonly property string modId: "mnojz.kde-connect-helper"
     readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("../../scripts/kde_connect_helper.py").toString().replace("file://", ""))
 
     property bool buttonVisible: true

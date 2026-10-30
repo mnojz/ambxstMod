@@ -9,14 +9,14 @@ The popup can refresh discovery, start the daemon, open an installed official KD
 Paste this URL into **Settings > Mods**:
 
 ```text
-https://github.com/flathead/ambxst-mods/tree/main/packages/kde-connect-helper
+https://github.com/mnojz/ambxstMod/tree/main/kde-connect-helper
 ```
 
 For a local checkout:
 
 ```bash
-ambxst mods install ./packages/kde-connect-helper
-ambxst mods enable community.kde-connect-helper
+ambxst mods install ./kde-connect-helper
+ambxst mods enable mnojz.kde-connect-helper
 ambxst reload
 ```
 

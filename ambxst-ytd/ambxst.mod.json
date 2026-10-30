@@ -7,7 +7,8 @@
   "description": "Download YouTube audio and video from an Ambxst bar popup.",
   "license": "MIT",
   "author": "mnojz",
-  "homepage": "https://github.com/mnojz/ambxst-ytd",
+  "authorUrl": "https://github.com/mnojz",
+  "homepage": "https://github.com/mnojz/ambxstMod/tree/main/ambxst-ytd",
   "compatibility": {
     "api": 1,
     "ambxst": ">=1.3.0 <1.4.0",
