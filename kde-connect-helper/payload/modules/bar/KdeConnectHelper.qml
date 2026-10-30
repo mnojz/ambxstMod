@@ -131,20 +131,19 @@ Item {
         return I18n.t("kde_connect_helper.install_method." + method);
     }
 
-    function formatBytes(bytes) {
-        if (!bytes || bytes <= 0)
-            return "0 GB";
-        const gb = bytes / (1024 * 1024 * 1024);
-        if (gb >= 1)
-            return gb.toFixed(1) + " GB";
-        const mb = bytes / (1024 * 1024);
-        return Math.round(mb) + " MB";
-    }
-
-    function signalBarsText(strength) {
-        if (strength < 0) return "";
-        const bars = ["", "▂", "▂▄", "▂▄▆", "▂▄▆█"];
-        return bars[Math.max(0, Math.min(4, strength))] || "▂▄▆█";
+    function batteryIcon() {
+        if (root.deviceCharging)
+            return Icons.lightning;
+        const b = root.deviceBattery;
+        if (b > 80)
+            return Icons.batteryFull;
+        if (b > 50)
+            return Icons.batteryHigh;
+        if (b > 20)
+            return Icons.batteryMedium;
+        if (b > 5)
+            return Icons.batteryLow;
+        return Icons.batteryEmpty;
     }
 
     function unsupportedActions() {
@@ -566,7 +565,7 @@ Item {
                     }
                 }
 
-                // Active / Selected Device Hero & Status Card
+                // Active / Selected Device Status Card
                 StyledRect {
                     Layout.fillWidth: true
                     implicitHeight: deviceColumn.implicitHeight + 24
@@ -579,9 +578,9 @@ Item {
                         id: deviceColumn
                         anchors.fill: parent
                         anchors.margins: 12
-                        spacing: 8
+                        spacing: 10
 
-                        // Top Row: Device glyph + Name + Security badge
+                        // Device Header: Icon + Name + Connection status
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 10
@@ -589,216 +588,166 @@ Item {
                             Text {
                                 text: Icons.deviceMobile
                                 font.family: Icons.font
-                                font.pixelSize: 22
+                                font.pixelSize: 20
                                 color: root.device?.reachable ? Colors.primary : Colors.overBackground
                                 opacity: root.device?.reachable ? 1 : 0.5
                                 verticalAlignment: Text.AlignVCenter
                             }
 
-                            ColumnLayout {
+                            Text {
                                 Layout.fillWidth: true
-                                spacing: 1
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: root.device?.name ?? ""
-                                    color: Colors.overBackground
-                                    font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(0)
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    text: String(root.device?.type || "phone").toUpperCase()
-                                    color: Colors.overBackground
-                                    opacity: 0.55
-                                    font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(-2)
-                                    font.bold: true
-                                }
+                                text: root.device?.name ?? ""
+                                color: Colors.overBackground
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(0)
+                                font.bold: true
+                                elide: Text.ElideRight
                             }
 
-                            // Security verification badge
+                            // Connection dot & status text
                             RowLayout {
-                                spacing: 4
-                                visible: !!root.device?.reachable
+                                spacing: 5
 
-                                Text {
-                                    text: Icons.shieldCheck
-                                    font.family: Icons.font
-                                    font.pixelSize: 13
-                                    color: Colors.green
-                                    verticalAlignment: Text.AlignVCenter
+                                Rectangle {
+                                    width: 6
+                                    height: 6
+                                    radius: 3
+                                    color: root.device?.reachable ? Colors.green : Colors.outline
                                 }
 
                                 Text {
-                                    text: "TLS Verified"
+                                    text: root.device?.reachable ? I18n.t("kde_connect_helper.device.connected") : I18n.t("kde_connect_helper.device.offline")
                                     color: Colors.overBackground
-                                    opacity: 0.7
+                                    opacity: 0.65
                                     font.family: Styling.defaultFont
                                     font.pixelSize: Styling.fontSize(-2)
                                 }
                             }
                         }
 
-                        // Divider
+                        // Top Divider Line
                         Rectangle {
                             Layout.fillWidth: true
                             height: 1
-                            color: Colors.outlineVariant
-                            opacity: 0.25
+                            color: Colors.overBackground
+                            opacity: 0.08
                         }
 
-                        // Status Row: Battery + Cellular Connectivity
+                        // Battery Row (if battery available and device reachable)
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 12
-
-                            // Battery & Charging
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 6
-                                visible: root.hasBattery && !!root.device?.reachable
-
-                                Text {
-                                    text: root.deviceCharging ? Icons.lightning : Icons.batteryCharging
-                                    font.family: Icons.font
-                                    font.pixelSize: 14
-                                    color: root.getBatteryColor()
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                ColumnLayout {
-                                    spacing: 0
-                                    Text {
-                                        text: Math.round(root.device.battery) + "%"
-                                        color: Colors.overBackground
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-1)
-                                        font.bold: true
-                                    }
-                                    Text {
-                                        text: root.deviceCharging ? (root.device.battery >= 90 ? "Nearly Full" : "Charging") : "On Battery"
-                                        color: Colors.overBackground
-                                        opacity: 0.65
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-2)
-                                    }
-                                }
-                            }
-
-                            // Cellular Network & Signal Strength
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 6
-                                visible: !!root.device?.reachable && (!!root.device?.cellularType || (root.device?.cellularStrength ?? -1) >= 0)
-
-                                Text {
-                                    text: Icons.wifiHigh
-                                    font.family: Icons.font
-                                    font.pixelSize: 14
-                                    color: Colors.primary
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                ColumnLayout {
-                                    spacing: 0
-                                    Text {
-                                        text: (root.device?.cellularType || "Cellular") + (root.device?.cellularStrength >= 0 ? " " + root.signalBarsText(root.device.cellularStrength) : "")
-                                        color: Colors.overBackground
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-1)
-                                        font.bold: true
-                                    }
-                                    Text {
-                                        text: (root.device?.cellularStrength >= 0) ? (root.device.cellularStrength + "/4 Signal") : "Connected"
-                                        color: Colors.overBackground
-                                        opacity: 0.65
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-2)
-                                    }
-                                }
-                            }
-
-                            // Offline text fallback
-                            Text {
-                                visible: !root.device?.reachable
-                                text: I18n.t("kde_connect_helper.device.offline")
-                                color: Colors.overBackground
-                                opacity: 0.6
-                                font.family: Styling.defaultFont
-                                font.pixelSize: Styling.fontSize(-1)
-                            }
-                        }
-                    }
-                }
-
-                // Phone Storage Capacity Card (when reachable and browse supported)
-                StyledRect {
-                    Layout.fillWidth: true
-                    implicitHeight: storageColumn.implicitHeight + 18
-                    visible: !!root.device?.reachable && !!root.device?.supportsBrowse
-                    variant: "common"
-                    radius: Styling.radius(0)
-                    enableShadow: false
-
-                    ColumnLayout {
-                        id: storageColumn
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 6
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
+                            visible: root.hasBattery && !!root.device?.reachable
+                            spacing: 8
 
                             Text {
-                                text: Icons.folder
+                                text: root.batteryIcon()
                                 font.family: Icons.font
-                                font.pixelSize: 13
-                                color: Colors.primary
+                                font.pixelSize: 15
+                                color: root.getBatteryColor()
                                 verticalAlignment: Text.AlignVCenter
                             }
 
                             Text {
-                                text: "Storage"
+                                text: "Battery"
                                 color: Colors.overBackground
+                                opacity: 0.8
                                 font.family: Styling.defaultFont
                                 font.pixelSize: Styling.fontSize(-1)
-                                font.bold: true
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            RowLayout {
+                                spacing: 6
+
+                                Text {
+                                    text: Math.round(root.deviceBattery) + "%"
+                                    color: Colors.overBackground
+                                    font.family: Styling.defaultFont
+                                    font.pixelSize: Styling.fontSize(-1)
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    visible: root.deviceCharging
+                                    text: "• Charging"
+                                    color: Colors.primary
+                                    font.family: Styling.defaultFont
+                                    font.pixelSize: Styling.fontSize(-2)
+                                    font.bold: true
+                                }
+                            }
+                        }
+
+                        // Middle Divider Line (between battery and cellular)
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 1
+                            color: Colors.overBackground
+                            opacity: 0.08
+                            visible: root.hasBattery && !!root.device?.reachable && (!!root.device?.cellularType || (root.device?.cellularStrength ?? -1) >= 0)
+                        }
+
+                        // Cellular / Mobile Network Row (if available and reachable)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: !!root.device?.reachable && (!!root.device?.cellularType || (root.device?.cellularStrength ?? -1) >= 0)
+                            spacing: 8
+
+                            // Visual 4-bar mobile signal indicator
+                            Item {
+                                width: 18
+                                height: 14
+
+                                Row {
+                                    spacing: 2
+                                    anchors.bottom: parent.bottom
+                                    anchors.left: parent.left
+
+                                    Repeater {
+                                        model: 4
+                                        Rectangle {
+                                            width: 3
+                                            height: 4 + index * 3
+                                            radius: 1
+                                            anchors.bottom: parent.bottom
+                                            color: (root.device?.cellularStrength >= (index + 1)) ? Colors.primary : Colors.overBackground
+                                            opacity: (root.device?.cellularStrength >= (index + 1)) ? 1.0 : 0.2
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "Mobile Network"
+                                color: Colors.overBackground
+                                opacity: 0.8
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(-1)
                             }
 
                             Item { Layout.fillWidth: true }
 
                             Text {
-                                text: (root.device?.storageTotal > 0)
-                                    ? root.formatBytes(root.device.storageFree) + " free of " + root.formatBytes(root.device.storageTotal)
-                                    : (root.device?.isMounted ? "Mounted" : "Click folder to view files")
+                                text: root.device?.cellularType
+                                    ? (root.device.cellularType + (root.device?.cellularStrength >= 0 ? " (" + root.device.cellularStrength + "/4)" : ""))
+                                    : (root.device?.cellularStrength >= 0 ? (root.device.cellularStrength + "/4 Signal") : "Connected")
                                 color: Colors.overBackground
-                                opacity: 0.7
                                 font.family: Styling.defaultFont
-                                font.pixelSize: Styling.fontSize(-2)
+                                font.pixelSize: Styling.fontSize(-1)
+                                font.bold: true
                             }
                         }
 
-                        // Storage capacity progress bar
-                        Rectangle {
+                        // Offline fallback message if unreachable
+                        Text {
+                            visible: !root.device?.reachable
                             Layout.fillWidth: true
-                            height: 4
-                            radius: 2
-                            color: Colors.outlineVariant
-                            opacity: 0.35
-                            visible: (root.device?.storageTotal ?? 0) > 0
-
-                            Rectangle {
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.left: parent.left
-                                width: Math.max(4, Math.min(parent.width, parent.width * ((root.device?.storageUsed ?? 0) / Math.max(1, (root.device?.storageTotal ?? 1)))))
-                                radius: 2
-                                color: Colors.primary
-                            }
+                            text: I18n.t("kde_connect_helper.device.offline")
+                            color: Colors.overBackground
+                            opacity: 0.6
+                            font.family: Styling.defaultFont
+                            font.pixelSize: Styling.fontSize(-1)
                         }
                     }
                 }
