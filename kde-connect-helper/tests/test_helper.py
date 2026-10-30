@@ -225,8 +225,8 @@ class PackageIntegrationTests(unittest.TestCase):
         feature_patch = (PACKAGE / "patches/feature.patch").read_text(encoding="utf-8")
         self.assertIn("implicitWidth: 36", widget)
         self.assertIn("implicitHeight: 36", widget)
-        self.assertEqual(feature_patch.count("Layout.preferredWidth: active ?"), 4)
-        self.assertEqual(feature_patch.count("Layout.preferredHeight: active ?"), 4)
+        self.assertEqual(feature_patch.count("Layout.preferredWidth: active ?"), 2)
+        self.assertEqual(feature_patch.count("Layout.preferredHeight: active ?"), 2)
 
     def test_bar_widget_uses_native_ambxst_states(self) -> None:
         widget = (PACKAGE / "payload/modules/bar/KdeConnectHelper.qml").read_text(encoding="utf-8")

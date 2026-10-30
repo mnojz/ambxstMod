@@ -9,17 +9,6 @@
       "default": true
     },
     {
-      "key": "placement",
-      "label": "Bar placement",
-      "description": "Place the button at the leading or trailing side of either bar orientation.",
-      "type": "enum",
-      "default": "trailing",
-      "options": [
-        { "label": "Left or top", "value": "leading" },
-        { "label": "Right or bottom", "value": "trailing" }
-      ]
-    },
-    {
       "key": "preferredDevice",
       "label": "Preferred device",
       "description": "Use auto or select a device from the popup. Device identifiers are stored here.",

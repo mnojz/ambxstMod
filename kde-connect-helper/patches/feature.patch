@@ -2,12 +2,10 @@ diff --git a/modules/bar/BarContent.qml b/modules/bar/BarContent.qml
 index 9d43848a..012fccb9 100644
 --- a/modules/bar/BarContent.qml
 +++ b/modules/bar/BarContent.qml
-@@ -383,6 +383,19 @@ Item {
-                             enableShadow: root.shadowsEnabled
-                         }
-
+@@ -536,2 +536,15 @@
+ 
 +                        Loader {
-+                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "leading"
++                            active: KdeConnectService.shouldShowButton
 +                            visible: active
 +                            Layout.preferredWidth: active ? (item?.implicitWidth ?? 36) : 0
 +                            Layout.preferredHeight: active ? 36 : 0
@@ -19,35 +17,11 @@ index 9d43848a..012fccb9 100644
 +                            }
 +                        }
 +
-                         Workspaces {
-                             orientation: root.orientation
-                             bar: QtObject {
-@@ -558,6 +571,19 @@ Item {
-                             endRadius: root.innerRadius
-                         }
-
+                         ControlsButton {
+@@ -743,2 +757,16 @@
+ 
 +                        Loader {
-+                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "trailing"
-+                            visible: active
-+                            Layout.preferredWidth: active ? (item?.implicitWidth ?? 36) : 0
-+                            Layout.preferredHeight: active ? 36 : 0
-+                            sourceComponent: KdeConnectHelper {
-+                                bar: root
-+                                layerEnabled: root.shadowsEnabled
-+                                startRadius: root.innerRadius
-+                                endRadius: root.innerRadius
-+                            }
-+                        }
-+
-                         PowerButton {
-                             id: powerButton
-                             startRadius: root.innerRadius
-@@ -583,6 +609,20 @@ Item {
-                             enableShadow: root.shadowsEnabled
-                         }
-
-+                        Loader {
-+                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "leading"
++                            active: KdeConnectService.shouldShowButton
 +                            visible: active
 +                            Layout.alignment: Qt.AlignHCenter
 +                            Layout.preferredWidth: active ? 36 : 0
@@ -60,30 +34,7 @@ index 9d43848a..012fccb9 100644
 +                            }
 +                        }
 +
-                         SysTray {
-                             bar: root
-                             enableShadow: root.shadowsEnabled
-@@ -765,6 +805,20 @@ Item {
-                             endRadius: root.innerRadius
-                         }
-
-+                        Loader {
-+                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "trailing"
-+                            visible: active
-+                            Layout.alignment: Qt.AlignHCenter
-+                            Layout.preferredWidth: active ? 36 : 0
-+                            Layout.preferredHeight: active ? (item?.implicitHeight ?? 36) : 0
-+                            sourceComponent: KdeConnectHelper {
-+                                bar: root
-+                                layerEnabled: root.shadowsEnabled
-+                                startRadius: root.innerRadius
-+                                endRadius: root.innerRadius
-+                            }
-+                        }
-+
-                         PowerButton {
-                             id: powerButtonVert
-                             Layout.preferredHeight: 36
+                         ControlsButton {
 diff --git a/modules/bar/systray/SysTrayItem.qml b/modules/bar/systray/SysTrayItem.qml
 index 346f18af..9e2da4d7 100644
 --- a/modules/bar/systray/SysTrayItem.qml

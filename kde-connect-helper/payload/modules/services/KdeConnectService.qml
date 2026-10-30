@@ -11,7 +11,6 @@ Singleton {
     readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("../../scripts/kde_connect_helper.py").toString().replace("file://", ""))
 
     property bool buttonVisible: true
-    property string placement: "trailing"
     property string preferredDevice: "auto"
     property string primaryClick: "popup"
     property bool showBatteryRing: true
@@ -69,7 +68,6 @@ Singleton {
     function applySetting(key, value) {
         switch (key) {
         case "buttonVisible": buttonVisible = !!value; break;
-        case "placement": placement = String(value); break;
         case "preferredDevice": preferredDevice = String(value || "auto"); break;
         case "primaryClick": primaryClick = String(value); break;
         case "showBatteryRing": showBatteryRing = !!value; break;
