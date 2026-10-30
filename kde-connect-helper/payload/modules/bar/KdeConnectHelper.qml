@@ -111,17 +111,13 @@ Item {
     }
 
     function openPrimary() {
-        if (!KdeConnectService.installed || KdeConnectService.primaryClick === "popup") {
-            if (!helperPopup.isOpen)
-                root.updatePopupSpace();
-            helperPopup.toggle();
-            if (!KdeConnectService.installed) {
-                root.installStep = 0;
-                KdeConnectService.loadInstallPlan();
-                installModal.visible = true;
-            }
-        } else {
-            KdeConnectService.openInterface();
+        if (!helperPopup.isOpen)
+            root.updatePopupSpace();
+        helperPopup.toggle();
+        if (!KdeConnectService.installed) {
+            root.installStep = 0;
+            KdeConnectService.loadInstallPlan();
+            installModal.visible = true;
         }
     }
 
@@ -226,7 +222,7 @@ Item {
             anchors.centerIn: parent
             width: 32
             height: 32
-            visible: root.hasBattery && !!root.device?.reachable && KdeConnectService.showBatteryRing
+            visible: root.hasBattery && !!root.device?.reachable
 
             readonly property real batteryPct: Math.max(0, Math.min(100, root.device?.battery ?? 0))
             property real angle: (batteryPct / 100) * (360 - 2 * gapAngle)

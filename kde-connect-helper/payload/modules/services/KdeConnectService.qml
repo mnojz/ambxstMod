@@ -10,12 +10,8 @@ Singleton {
     readonly property string modId: "mnojz.kde-connect-helper"
     readonly property string helperPath: decodeURIComponent(Qt.resolvedUrl("../../scripts/kde_connect_helper.py").toString().replace("file://", ""))
 
-    property bool buttonVisible: true
     property string preferredDevice: "auto"
-    property string primaryClick: "popup"
-    property bool showBatteryRing: true
     property int pollingInterval: 15
-    property bool hideDisconnected: false
     property bool showPing: true
     property bool showRing: true
     property bool showFileShare: true
@@ -59,20 +55,15 @@ Singleton {
             return connectedDevices[0];
         return pairedDevices.length > 0 ? pairedDevices[0] : null;
     }
-    readonly property bool shouldShowButton: buttonVisible
-        && (!hideDisconnected || connectedDevices.length > 0 || !installed || !daemonRunning)
+    readonly property bool shouldShowButton: true
 
     signal refreshed
     signal filesChosen(var paths)
 
     function applySetting(key, value) {
         switch (key) {
-        case "buttonVisible": buttonVisible = !!value; break;
         case "preferredDevice": preferredDevice = String(value || "auto"); break;
-        case "primaryClick": primaryClick = String(value); break;
-        case "showBatteryRing": showBatteryRing = !!value; break;
         case "pollingInterval": pollingInterval = Math.max(5, Math.min(300, Number(value) || 15)); break;
-        case "hideDisconnected": hideDisconnected = !!value; break;
         case "showPing": showPing = !!value; break;
         case "showRing": showRing = !!value; break;
         case "showFileShare": showFileShare = !!value; break;
@@ -281,7 +272,7 @@ Singleton {
         id: pollTimer
         interval: root.pollingInterval * 1000
         repeat: true
-        running: root.buttonVisible && root.installed && root.daemonRunning
+        running: root.installed && root.daemonRunning
         onTriggered: root.refresh()
     }
     Timer {

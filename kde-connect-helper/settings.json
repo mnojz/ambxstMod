@@ -2,36 +2,11 @@
   "version": 1,
   "fields": [
     {
-      "key": "buttonVisible",
-      "label": "Show bar button",
-      "description": "Show the KDE Connect helper in the bar.",
-      "type": "boolean",
-      "default": true
-    },
-    {
       "key": "preferredDevice",
       "label": "Preferred device",
       "description": "Use auto or select a device from the popup. Device identifiers are stored here.",
       "type": "string",
       "default": "auto"
-    },
-    {
-      "key": "primaryClick",
-      "label": "Primary click action",
-      "description": "Open the helper popup or the official KDE Connect interface.",
-      "type": "enum",
-      "default": "popup",
-      "options": [
-        { "label": "Open helper popup", "value": "popup" },
-        { "label": "Open KDE Connect", "value": "interface" }
-      ]
-    },
-    {
-      "key": "showBatteryRing",
-      "label": "Show battery gauge",
-      "description": "Show the circular battery gauge around the bar icon when battery information is available.",
-      "type": "boolean",
-      "default": true
     },
     {
       "key": "pollingInterval",
@@ -41,13 +16,6 @@
       "default": 15,
       "minimum": 5,
       "maximum": 300
-    },
-    {
-      "key": "hideDisconnected",
-      "label": "Hide when disconnected",
-      "description": "Hide the button when no paired device is connected, while keeping recovery states visible.",
-      "type": "boolean",
-      "default": false
     },
     {
       "key": "hideKdeConnectTrayIcon",
