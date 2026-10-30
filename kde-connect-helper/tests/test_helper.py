@@ -248,7 +248,7 @@ class PackageIntegrationTests(unittest.TestCase):
         self.assertIn("color: helperButtonBackground.item", widget)
         self.assertIn("control.danger ? Colors.red : helperButtonBackground.item", widget)
         self.assertIn(
-            'variant: shareText.hovered || shareText.activeFocus ? "focus" : "internalbg"',
+            'variant: manualInstallCommand.activeFocus ? "focus" : "internalbg"',
             widget,
         )
 

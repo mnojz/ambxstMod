@@ -121,15 +121,6 @@ Item {
         }
     }
 
-    function launcherText() {
-        const key = KdeConnectService.launcherKind || "none";
-        return I18n.t("kde_connect_helper.launcher." + key);
-    }
-
-    function autostartText() {
-        return I18n.t("kde_connect_helper.autostart." + KdeConnectService.autostartState);
-    }
-
     function planValue(value) {
         const text = String(value ?? "");
         return text.length > 0 && text !== "unknown" ? text : I18n.t("kde_connect_helper.unknown");
@@ -150,8 +141,6 @@ Item {
             actions.push(I18n.t("kde_connect_helper.ring"));
         if (!device.supportsShare)
             actions.push(I18n.t("kde_connect_helper.send_file"));
-        if (!device.supportsText)
-            actions.push(I18n.t("kde_connect_helper.share_text"));
         return actions.join(", ");
     }
 
@@ -161,10 +150,10 @@ Item {
         property string labelText: ""
         property bool danger: false
         implicitHeight: 36
-        leftPadding: 10
-        rightPadding: 10
+        leftPadding: control.labelText.length > 0 ? 8 : 0
+        rightPadding: control.labelText.length > 0 ? 8 : 0
         activeFocusOnTab: true
-        Accessible.name: labelText
+        Accessible.name: control.labelText.length > 0 ? control.labelText : control.iconText
         background: StyledRect {
             id: helperButtonBackground
             variant: control.down || control.checked ? "primary" : (control.hovered || control.activeFocus ? "focus" : "common")
@@ -172,15 +161,19 @@ Item {
             enableShadow: false
         }
         contentItem: RowLayout {
-            spacing: 7
+            spacing: control.iconText.length > 0 && control.labelText.length > 0 ? 6 : 0
             Text {
                 visible: control.iconText.length > 0
+                Layout.alignment: control.labelText.length === 0 ? Qt.AlignCenter : Qt.AlignVCenter
                 text: control.iconText
                 font.family: Icons.font
                 font.pixelSize: 16
                 color: helperButtonBackground.item
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
             Text {
+                visible: control.labelText.length > 0
                 Layout.fillWidth: true
                 text: control.labelText
                 color: control.danger ? Colors.red : helperButtonBackground.item
@@ -391,12 +384,14 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
+
                     Text {
                         text: Icons.deviceMobile
                         font.family: Icons.font
-                        font.pixelSize: 22
+                        font.pixelSize: 20
                         color: Colors.overBackground
                     }
+
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
@@ -417,17 +412,37 @@ Item {
                             wrapMode: Text.Wrap
                         }
                     }
+
                     BusyIndicator {
                         running: KdeConnectService.scanning || KdeConnectService.busy
                         visible: running
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
+                        Layout.preferredWidth: 22
+                        Layout.preferredHeight: 22
+                    }
+
+                    HelperButton {
+                        id: refreshButton
+                        implicitWidth: 32
+                        implicitHeight: 32
+                        iconText: Icons.sync
+                        enabled: !KdeConnectService.activeRequest
+                        onClicked: KdeConnectService.refresh()
+                    }
+
+                    HelperButton {
+                        implicitWidth: 32
+                        implicitHeight: 32
+                        iconText: Icons.arrowSquareOut
+                        enabled: KdeConnectService.launcherExecutable.length > 0 && !KdeConnectService.activeRequest
+                        onClicked: KdeConnectService.openInterface()
                     }
                 }
 
+                // Problem states (only shown if something needs attention)
                 StyledRect {
                     Layout.fillWidth: true
                     implicitHeight: statusColumn.implicitHeight + 20
+                    visible: !KdeConnectService.installed || !KdeConnectService.daemonRunning
                     variant: "common"
                     radius: Styling.radius(0)
                     enableShadow: false
@@ -453,36 +468,6 @@ Item {
                             font.pixelSize: Styling.fontSize(-1)
                         }
                     }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-                    HelperButton {
-                        id: refreshButton
-                        Layout.fillWidth: true
-                        iconText: Icons.sync
-                        labelText: I18n.t("kde_connect_helper.refresh")
-                        enabled: !KdeConnectService.activeRequest
-                        onClicked: KdeConnectService.refresh()
-                    }
-                    HelperButton {
-                        Layout.fillWidth: true
-                        iconText: Icons.arrowSquareOut
-                        labelText: I18n.t("kde_connect_helper.open_interface")
-                        enabled: KdeConnectService.launcherExecutable.length > 0 && !KdeConnectService.activeRequest
-                        onClicked: KdeConnectService.openInterface()
-                    }
-                }
-                Text {
-                    Layout.fillWidth: true
-                    visible: KdeConnectService.installed
-                    text: I18n.t("kde_connect_helper.interface_available", root.launcherText())
-                    color: Colors.overBackground
-                    opacity: 0.65
-                    font.family: Styling.defaultFont
-                    font.pixelSize: Styling.fontSize(-2)
-                    wrapMode: Text.Wrap
                 }
 
                 HelperButton {
@@ -521,7 +506,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
-                    visible: KdeConnectService.installed && KdeConnectService.pairedDevices.length === 0
+                    visible: KdeConnectService.installed && KdeConnectService.daemonRunning && KdeConnectService.pairedDevices.length === 0
                     text: I18n.t("kde_connect_helper.pairing_hint")
                     color: Colors.overBackground
                     opacity: 0.76
@@ -530,9 +515,10 @@ Item {
                     wrapMode: Text.Wrap
                 }
 
+                // Device selector (if more than 1 paired device)
                 ColumnLayout {
                     Layout.fillWidth: true
-                    visible: KdeConnectService.pairedDevices.length > 0
+                    visible: KdeConnectService.pairedDevices.length > 1
                     spacing: 5
                     Text {
                         text: I18n.t("kde_connect_helper.devices")
@@ -561,41 +547,90 @@ Item {
                     }
                 }
 
+                // Active / Selected Device Card
                 StyledRect {
                     Layout.fillWidth: true
-                    implicitHeight: deviceColumn.implicitHeight + 20
+                    implicitHeight: deviceRow.implicitHeight + 20
                     visible: !!root.device
                     variant: "common"
                     radius: Styling.radius(0)
                     enableShadow: false
-                    ColumnLayout {
-                        id: deviceColumn
+
+                    RowLayout {
+                        id: deviceRow
                         anchors.fill: parent
                         anchors.margins: 10
-                        spacing: 4
+                        spacing: 10
+
                         Text {
-                            Layout.fillWidth: true
-                            text: root.device?.name ?? ""
-                            color: Colors.overBackground
-                            font.family: Styling.defaultFont
-                            font.pixelSize: Styling.fontSize(0)
-                            font.bold: true
-                            elide: Text.ElideRight
+                            text: Icons.deviceMobile
+                            font.family: Icons.font
+                            font.pixelSize: 22
+                            color: root.device?.reachable ? Colors.primary : Colors.overBackground
+                            opacity: root.device?.reachable ? 1 : 0.5
+                            verticalAlignment: Text.AlignVCenter
                         }
-                        Text {
+
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            text: root.hasBattery
-                                ? I18n.t("kde_connect_helper.battery_value", Math.round(root.device.battery),
-                                    root.device.charging ? I18n.t("kde_connect_helper.charging") : "")
-                                : I18n.t("kde_connect_helper.battery_unavailable")
-                            color: Colors.overBackground
-                            opacity: 0.72
-                            font.family: Styling.defaultFont
-                            font.pixelSize: Styling.fontSize(-1)
+                            spacing: 3
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.device?.name ?? ""
+                                color: Colors.overBackground
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(0)
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+
+                            RowLayout {
+                                spacing: 6
+                                visible: root.hasBattery && !!root.device?.reachable
+
+                                Text {
+                                    text: root.deviceCharging ? Icons.lightning : Icons.batteryCharging
+                                    font.family: Icons.font
+                                    font.pixelSize: 13
+                                    color: root.getBatteryColor()
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                Text {
+                                    text: root.hasBattery
+                                        ? I18n.t("kde_connect_helper.battery_value", Math.round(root.device.battery),
+                                            root.device.charging ? I18n.t("kde_connect_helper.charging") : "")
+                                        : ""
+                                    color: Colors.overBackground
+                                    opacity: 0.72
+                                    font.family: Styling.defaultFont
+                                    font.pixelSize: Styling.fontSize(-1)
+                                }
+                            }
+
+                            Text {
+                                visible: !root.device?.reachable
+                                text: I18n.t("kde_connect_helper.device.offline")
+                                color: Colors.overBackground
+                                opacity: 0.6
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(-1)
+                            }
+
+                            Text {
+                                visible: root.device?.reachable && !root.hasBattery
+                                text: I18n.t("kde_connect_helper.battery_unavailable")
+                                color: Colors.overBackground
+                                opacity: 0.6
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(-1)
+                            }
                         }
                     }
                 }
 
+                // Quick Actions (Single Row)
                 Text {
                     visible: !!root.device
                     text: I18n.t("kde_connect_helper.quick_actions")
@@ -604,12 +639,12 @@ Item {
                     font.pixelSize: Styling.fontSize(-1)
                     font.bold: true
                 }
-                GridLayout {
+
+                RowLayout {
                     Layout.fillWidth: true
                     visible: !!root.device
-                    columns: 2
-                    columnSpacing: 6
-                    rowSpacing: 6
+                    spacing: 6
+
                     HelperButton {
                         Layout.fillWidth: true
                         iconText: Icons.paperPlane
@@ -617,6 +652,7 @@ Item {
                         enabled: !!root.device?.reachable && !!root.device?.supportsPing && !KdeConnectService.activeRequest
                         onClicked: KdeConnectService.runAction("ping")
                     }
+
                     HelperButton {
                         Layout.fillWidth: true
                         iconText: Icons.bellRinging
@@ -624,6 +660,7 @@ Item {
                         enabled: !!root.device?.reachable && !!root.device?.supportsRing && !KdeConnectService.activeRequest
                         onClicked: KdeConnectService.runAction("ring")
                     }
+
                     HelperButton {
                         Layout.fillWidth: true
                         iconText: Icons.file
@@ -631,14 +668,8 @@ Item {
                         enabled: !!root.device?.reachable && !!root.device?.supportsShare && !KdeConnectService.activeRequest
                         onClicked: KdeConnectService.chooseFiles(I18n.t("kde_connect_helper.choose_file"))
                     }
-                    HelperButton {
-                        Layout.fillWidth: true
-                        iconText: Icons.clip
-                        labelText: I18n.t("kde_connect_helper.share_text")
-                        enabled: !!root.device?.reachable && !!root.device?.supportsText && !KdeConnectService.activeRequest
-                        onClicked: textPanel.visible = !textPanel.visible
-                    }
                 }
+
                 Text {
                     Layout.fillWidth: true
                     visible: !!root.device && (!root.device.reachable || root.unsupportedActions().length > 0)
@@ -649,77 +680,6 @@ Item {
                     font.family: Styling.defaultFont
                     font.pixelSize: Styling.fontSize(-2)
                     wrapMode: Text.Wrap
-                }
-
-                ColumnLayout {
-                    id: textPanel
-                    Layout.fillWidth: true
-                    visible: false
-                    spacing: 5
-                    TextArea {
-                        id: shareText
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 72
-                        placeholderText: I18n.t("kde_connect_helper.text_placeholder")
-                        wrapMode: TextEdit.Wrap
-                        onTextChanged: {
-                            if (length > 4096)
-                                remove(4096, length);
-                        }
-                        Accessible.name: I18n.t("kde_connect_helper.text_placeholder")
-                        background: StyledRect {
-                            variant: shareText.hovered || shareText.activeFocus ? "focus" : "internalbg"
-                            radius: Styling.radius(-4)
-                            enableShadow: false
-                        }
-                        color: Colors.overBackground
-                    }
-                    HelperButton {
-                        Layout.fillWidth: true
-                        labelText: I18n.t("kde_connect_helper.review_and_share")
-                        enabled: shareText.text.trim().length > 0 && !KdeConnectService.activeRequest
-                        onClicked: {
-                            root.confirmAction = "text";
-                            confirmModal.visible = true;
-                        }
-                    }
-                }
-
-                Text {
-                    text: I18n.t("kde_connect_helper.autostart_title")
-                    color: Colors.overBackground
-                    font.family: Styling.defaultFont
-                    font.pixelSize: Styling.fontSize(-1)
-                    font.bold: true
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: root.autostartText()
-                    color: Colors.overBackground
-                    opacity: 0.76
-                    font.family: Styling.defaultFont
-                    font.pixelSize: Styling.fontSize(-1)
-                    wrapMode: Text.Wrap
-                }
-                Text {
-                    Layout.fillWidth: true
-                    visible: KdeConnectService.autostartPath.length > 0
-                    text: I18n.t("kde_connect_helper.autostart_path", KdeConnectService.autostartPath)
-                    color: Colors.overBackground
-                    opacity: 0.58
-                    font.family: Styling.defaultFont
-                    font.pixelSize: Styling.fontSize(-2)
-                    elide: Text.ElideMiddle
-                }
-                HelperButton {
-                    Layout.fillWidth: true
-                    visible: KdeConnectService.installed
-                    iconText: KdeConnectService.autostartState === "enabled" ? Icons.cancel : Icons.accept
-                    labelText: KdeConnectService.autostartState === "enabled"
-                        ? I18n.t("kde_connect_helper.disable_autostart")
-                        : I18n.t("kde_connect_helper.enable_autostart")
-                    enabled: !KdeConnectService.activeRequest && KdeConnectService.autostartState !== "unavailable"
-                    onClicked: KdeConnectService.setAutostart(KdeConnectService.autostartState !== "enabled")
                 }
 
                 StyledRect {
@@ -925,8 +885,7 @@ Item {
                     spacing: 10
                     Text {
                         Layout.fillWidth: true
-                        text: root.confirmAction === "file" ? I18n.t("kde_connect_helper.confirm_file")
-                            : I18n.t("kde_connect_helper.confirm_text")
+                        text: I18n.t("kde_connect_helper.confirm_file")
                         color: Colors.overBackground
                         font.family: Styling.defaultFont
                         font.pixelSize: Styling.fontSize(0)
@@ -947,13 +906,7 @@ Item {
                             labelText: I18n.t("kde_connect_helper.send")
                             enabled: !KdeConnectService.activeRequest
                             onClicked: {
-                                if (root.confirmAction === "file")
-                                    KdeConnectService.runAction("share_files", root.pendingFiles);
-                                else {
-                                    KdeConnectService.runAction("share_text", shareText.text);
-                                    shareText.clear();
-                                    textPanel.visible = false;
-                                }
+                                KdeConnectService.runAction("share_files", root.pendingFiles);
                                 confirmModal.visible = false;
                             }
                         }
