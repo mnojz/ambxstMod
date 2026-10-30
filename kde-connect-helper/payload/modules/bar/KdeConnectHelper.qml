@@ -556,140 +556,150 @@ Item {
                 // Active / Selected Device Status Card
                 StyledRect {
                     Layout.fillWidth: true
-                    implicitHeight: deviceRow.implicitHeight + 20
+                    implicitHeight: deviceColumn.implicitHeight + 24
                     visible: !!root.device
                     variant: "common"
                     radius: Styling.radius(0)
                     enableShadow: false
 
-                    RowLayout {
-                        id: deviceRow
+                    ColumnLayout {
+                        id: deviceColumn
                         anchors.fill: parent
                         anchors.margins: 12
-                        spacing: 12
+                        spacing: 8
 
-                        Text {
-                            text: Icons.deviceMobile
-                            font.family: Icons.font
-                            font.pixelSize: 22
-                            color: root.device?.reachable ? Colors.primary : Colors.overBackground
-                            opacity: root.device?.reachable ? 1 : 0.5
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        ColumnLayout {
+                        // Row 1: Device / Model Name + Connection status
+                        RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
 
-                            // Device Header: Name + Connection status
-                            RowLayout {
+                            Text {
+                                Layout.preferredWidth: 20
+                                text: Icons.deviceMobile
+                                font.family: Icons.font
+                                font.pixelSize: 16
+                                color: root.device?.reachable ? Colors.primary : Colors.overBackground
+                                opacity: root.device?.reachable ? 1 : 0.5
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            Text {
                                 Layout.fillWidth: true
-                                spacing: 8
+                                text: root.device?.name ?? ""
+                                color: Colors.overBackground
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(0)
+                                font.bold: true
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            RowLayout {
+                                spacing: 5
+
+                                Rectangle {
+                                    Layout.preferredWidth: 6
+                                    Layout.preferredHeight: 6
+                                    radius: 3
+                                    color: root.device?.reachable ? Colors.green : Colors.outline
+                                }
 
                                 Text {
-                                    Layout.fillWidth: true
-                                    text: root.device?.name ?? ""
+                                    text: root.device?.reachable ? I18n.t("kde_connect_helper.device.connected") : I18n.t("kde_connect_helper.device.offline")
+                                    color: Colors.overBackground
+                                    opacity: 0.65
+                                    font.family: Styling.defaultFont
+                                    font.pixelSize: Styling.fontSize(-2)
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
+
+                        // Divider 1
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 1
+                            color: Colors.overBackground
+                            opacity: 0.08
+                            visible: root.hasBattery && !!root.device?.reachable
+                        }
+
+                        // Row 2: Battery
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: root.hasBattery && !!root.device?.reachable
+                            spacing: 8
+
+                            Text {
+                                Layout.preferredWidth: 20
+                                text: root.batteryIcon()
+                                font.family: Icons.font
+                                font.pixelSize: 16
+                                color: root.getBatteryColor()
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            Text {
+                                text: "Battery"
+                                color: Colors.overBackground
+                                opacity: 0.8
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(-1)
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            RowLayout {
+                                spacing: 5
+
+                                Text {
+                                    text: Math.round(root.device?.battery ?? 0) + "%"
                                     color: Colors.overBackground
                                     font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(0)
+                                    font.pixelSize: Styling.fontSize(-1)
                                     font.bold: true
-                                    elide: Text.ElideRight
-                                }
-
-                                RowLayout {
-                                    spacing: 5
-
-                                    Rectangle {
-                                        Layout.preferredWidth: 6
-                                        Layout.preferredHeight: 6
-                                        radius: 3
-                                        color: root.device?.reachable ? Colors.green : Colors.outline
-                                    }
-
-                                    Text {
-                                        text: root.device?.reachable ? I18n.t("kde_connect_helper.device.connected") : I18n.t("kde_connect_helper.device.offline")
-                                        color: Colors.overBackground
-                                        opacity: 0.65
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-2)
-                                    }
-                                }
-                            }
-
-                            // Divider
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 1
-                                color: Colors.overBackground
-                                opacity: 0.08
-                                visible: root.hasBattery && !!root.device?.reachable
-                            }
-
-                            // Battery Row (if battery available and device reachable)
-                            RowLayout {
-                                Layout.fillWidth: true
-                                visible: root.hasBattery && !!root.device?.reachable
-                                spacing: 6
-
-                                Text {
-                                    text: root.batteryIcon()
-                                    font.family: Icons.font
-                                    font.pixelSize: 14
-                                    color: root.getBatteryColor()
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 Text {
-                                    text: "Battery"
-                                    color: Colors.overBackground
-                                    opacity: 0.8
+                                    visible: root.deviceCharging
+                                    text: "• Charging"
+                                    color: Colors.primary
                                     font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(-1)
-                                }
-
-                                Item { Layout.fillWidth: true }
-
-                                RowLayout {
-                                    spacing: 5
-
-                                    Text {
-                                        text: Math.round(root.device?.battery ?? 0) + "%"
-                                        color: Colors.overBackground
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-1)
-                                        font.bold: true
-                                    }
-
-                                    Text {
-                                        visible: root.deviceCharging
-                                        text: "• Charging"
-                                        color: Colors.primary
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-2)
-                                        font.bold: true
-                                    }
+                                    font.pixelSize: Styling.fontSize(-2)
+                                    font.bold: true
+                                    verticalAlignment: Text.AlignVCenter
                                 }
                             }
+                        }
 
-                            // Divider
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 1
-                                color: Colors.overBackground
-                                opacity: 0.08
-                                visible: !!root.device?.reachable && (!!root.device?.cellularType || (root.device?.cellularStrength ?? -1) >= 0)
-                            }
+                        // Divider 2
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 1
+                            color: Colors.overBackground
+                            opacity: 0.08
+                            visible: !!root.device?.reachable && (!!root.device?.cellularType || (root.device?.cellularStrength ?? -1) >= 0)
+                        }
 
-                            // Cellular / Mobile Network Row (if available and reachable)
-                            RowLayout {
-                                Layout.fillWidth: true
-                                visible: !!root.device?.reachable && (!!root.device?.cellularType || (root.device?.cellularStrength ?? -1) >= 0)
-                                spacing: 6
+                        // Row 3: Cellular / Mobile Network
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: !!root.device?.reachable && (!!root.device?.cellularType || (root.device?.cellularStrength ?? -1) >= 0)
+                            spacing: 8
 
-                                // Visual 4-bar mobile signal indicator
+                            // Visual 4-bar mobile signal indicator (centered in 20px slot)
+                            Item {
+                                Layout.preferredWidth: 20
+                                Layout.preferredHeight: 16
+
                                 Item {
-                                    Layout.preferredWidth: 18
-                                    Layout.preferredHeight: 14
+                                    anchors.centerIn: parent
+                                    width: 18
+                                    height: 14
 
                                     Rectangle {
                                         x: 0; y: 10; width: 3; height: 4; radius: 1
@@ -712,38 +722,40 @@ Item {
                                         opacity: (root.device?.cellularStrength >= 4) ? 1.0 : 0.25
                                     }
                                 }
-
-                                Text {
-                                    text: "Mobile Network"
-                                    color: Colors.overBackground
-                                    opacity: 0.8
-                                    font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(-1)
-                                }
-
-                                Item { Layout.fillWidth: true }
-
-                                Text {
-                                    text: root.device?.cellularType
-                                        ? (root.device.cellularType + (root.device?.cellularStrength >= 0 ? " (" + root.device.cellularStrength + "/4)" : ""))
-                                        : (root.device?.cellularStrength >= 0 ? (root.device.cellularStrength + "/4 Signal") : "Connected")
-                                    color: Colors.overBackground
-                                    font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(-1)
-                                    font.bold: true
-                                }
                             }
 
-                            // Offline fallback message if unreachable
                             Text {
-                                visible: !root.device?.reachable
-                                Layout.fillWidth: true
-                                text: I18n.t("kde_connect_helper.device.offline")
+                                text: "Mobile Network"
                                 color: Colors.overBackground
-                                opacity: 0.6
+                                opacity: 0.8
                                 font.family: Styling.defaultFont
                                 font.pixelSize: Styling.fontSize(-1)
+                                verticalAlignment: Text.AlignVCenter
                             }
+
+                            Item { Layout.fillWidth: true }
+
+                            Text {
+                                text: root.device?.cellularType
+                                    ? (root.device.cellularType + (root.device?.cellularStrength >= 0 ? " (" + root.device.cellularStrength + "/4)" : ""))
+                                    : (root.device?.cellularStrength >= 0 ? (root.device.cellularStrength + "/4 Signal") : "Connected")
+                                color: Colors.overBackground
+                                font.family: Styling.defaultFont
+                                font.pixelSize: Styling.fontSize(-1)
+                                font.bold: true
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        // Offline fallback message if unreachable
+                        Text {
+                            visible: !root.device?.reachable
+                            Layout.fillWidth: true
+                            text: I18n.t("kde_connect_helper.device.offline")
+                            color: Colors.overBackground
+                            opacity: 0.6
+                            font.family: Styling.defaultFont
+                            font.pixelSize: Styling.fontSize(-1)
                         }
                     }
                 }
