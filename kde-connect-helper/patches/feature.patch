@@ -1,0 +1,185 @@
+diff --git a/modules/bar/BarContent.qml b/modules/bar/BarContent.qml
+index 9d43848a..012fccb9 100644
+--- a/modules/bar/BarContent.qml
++++ b/modules/bar/BarContent.qml
+@@ -383,6 +383,19 @@ Item {
+                             enableShadow: root.shadowsEnabled
+                         }
+
++                        Loader {
++                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "leading"
++                            visible: active
++                            Layout.preferredWidth: active ? (item?.implicitWidth ?? 36) : 0
++                            Layout.preferredHeight: active ? 36 : 0
++                            sourceComponent: KdeConnectHelper {
++                                bar: root
++                                layerEnabled: root.shadowsEnabled
++                                startRadius: root.innerRadius
++                                endRadius: root.innerRadius
++                            }
++                        }
++
+                         Workspaces {
+                             orientation: root.orientation
+                             bar: QtObject {
+@@ -558,6 +571,19 @@ Item {
+                             endRadius: root.innerRadius
+                         }
+
++                        Loader {
++                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "trailing"
++                            visible: active
++                            Layout.preferredWidth: active ? (item?.implicitWidth ?? 36) : 0
++                            Layout.preferredHeight: active ? 36 : 0
++                            sourceComponent: KdeConnectHelper {
++                                bar: root
++                                layerEnabled: root.shadowsEnabled
++                                startRadius: root.innerRadius
++                                endRadius: root.innerRadius
++                            }
++                        }
++
+                         PowerButton {
+                             id: powerButton
+                             startRadius: root.innerRadius
+@@ -583,6 +609,20 @@ Item {
+                             enableShadow: root.shadowsEnabled
+                         }
+
++                        Loader {
++                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "leading"
++                            visible: active
++                            Layout.alignment: Qt.AlignHCenter
++                            Layout.preferredWidth: active ? 36 : 0
++                            Layout.preferredHeight: active ? (item?.implicitHeight ?? 36) : 0
++                            sourceComponent: KdeConnectHelper {
++                                bar: root
++                                layerEnabled: root.shadowsEnabled
++                                startRadius: root.innerRadius
++                                endRadius: root.innerRadius
++                            }
++                        }
++
+                         SysTray {
+                             bar: root
+                             enableShadow: root.shadowsEnabled
+@@ -765,6 +805,20 @@ Item {
+                             endRadius: root.innerRadius
+                         }
+
++                        Loader {
++                            active: KdeConnectService.shouldShowButton && KdeConnectService.placement === "trailing"
++                            visible: active
++                            Layout.alignment: Qt.AlignHCenter
++                            Layout.preferredWidth: active ? 36 : 0
++                            Layout.preferredHeight: active ? (item?.implicitHeight ?? 36) : 0
++                            sourceComponent: KdeConnectHelper {
++                                bar: root
++                                layerEnabled: root.shadowsEnabled
++                                startRadius: root.innerRadius
++                                endRadius: root.innerRadius
++                            }
++                        }
++
+                         PowerButton {
+                             id: powerButtonVert
+                             Layout.preferredHeight: 36
+diff --git a/modules/bar/systray/SysTrayItem.qml b/modules/bar/systray/SysTrayItem.qml
+index 346f18af..9e2da4d7 100644
+--- a/modules/bar/systray/SysTrayItem.qml
++++ b/modules/bar/systray/SysTrayItem.qml
+@@ -45,6 +45,10 @@ MouseArea {
+     implicitWidth: trayItemSize
+     implicitHeight: trayItemSize
+
++    // KDE Connect helper replaces the separate KDE Connect tray icon when
++    // configured. Invisible delegates are skipped by the bar and popup layouts.
++    visible: !KdeConnectService.hidesTrayItem(root.item)
++
+     // Native Wayland drag: the compositor carries the icon above every
+     // surface and delivers the drop to whichever window sits under the
+     // pointer, so bar ↔ popup transfers need no coordinate work
+diff --git a/modules/theme/Icons.qml b/modules/theme/Icons.qml
+index 3333506c..d2ed392a 100644
+--- a/modules/theme/Icons.qml
++++ b/modules/theme/Icons.qml
+@@ -222,6 +222,7 @@ QtObject {
+
+     readonly property string headphones: ""
+     readonly property string mouse: ""
++    readonly property string deviceMobile: ""
+     readonly property string phone: ""
+     readonly property string watch: ""
+     readonly property string gamepad: ""
+diff --git a/modules/widgets/dashboard/controls/ModsPanel.qml b/modules/widgets/dashboard/controls/ModsPanel.qml
+index 66cbd27d..892d5f28 100644
+--- a/modules/widgets/dashboard/controls/ModsPanel.qml
++++ b/modules/widgets/dashboard/controls/ModsPanel.qml
+@@ -507,16 +507,17 @@ Item {
+                             font.family: Config.theme.font
+                             font.pixelSize: Styling.fontSize(-1)
+                             selectByMouse: true
++                            hoverEnabled: true
+                             enabled: !ModsService.busy
+                             Accessible.name: root.tr("mods.package_source")
+                             Accessible.description: root.tr("mods.source_placeholder")
+-
+                             background: StyledRect {
+-                                variant: sourceInput.activeFocus ? "focus" : "common"
++                                variant: sourceInput.hovered || sourceInput.activeFocus ? "focus" : "internalbg"
+                                 radius: Styling.radius(-2)
+                                 enableShadow: false
++                                border.width: sourceInput.activeFocus ? 2 : 0
++                                border.color: Styling.srItem("primary")
+                             }
+-
+                             onAccepted: {
+                                 const source = text.trim();
+                                 if (source !== "")
+@@ -1177,7 +1178,7 @@ Item {
+
+                                         Text {
+                                             Layout.fillWidth: true
+-                                            text: settingRow.modelData.label
++                                            text: root.tr(settingRow.modelData.label)
+                                             font.family: Config.theme.font
+                                             font.pixelSize: Styling.fontSize(-1)
+                                             font.weight: Font.Medium
+@@ -1188,7 +1189,7 @@ Item {
+                                         Text {
+                                             visible: (settingRow.modelData.description ?? "") !== ""
+                                             Layout.fillWidth: true
+-                                            text: settingRow.modelData.description ?? ""
++                                            text: root.tr(settingRow.modelData.description ?? "")
+                                             font.family: Config.theme.font
+                                             font.pixelSize: Styling.fontSize(-2)
+                                             color: Colors.outline
+@@ -1214,7 +1215,7 @@ Item {
+                                             const value = ModsService.settingsValues[settingRow.modelData.key];
+                                             for (let i = 0; i < options.length; i++) {
+                                                 if (options[i].value === value)
+-                                                    return options[i].label;
++                                                    return root.tr(options[i].label);
+                                             }
+                                             return String(value ?? root.tr("mods.select"));
+                                         }
+@@ -1246,13 +1247,16 @@ Item {
+                                         font.family: Config.theme.font
+                                         font.pixelSize: Styling.fontSize(-1)
+                                         selectByMouse: true
++                                        hoverEnabled: true
+                                         inputMethodHints: settingRow.modelData.type === "string" ? Qt.ImhNone : Qt.ImhFormattedNumbersOnly
+-                                        Accessible.name: settingRow.modelData.label
+-                                        Accessible.description: settingRow.modelData.description ?? ""
++                                        Accessible.name: root.tr(settingRow.modelData.label)
++                                        Accessible.description: root.tr(settingRow.modelData.description ?? "")
+                                         background: StyledRect {
+-                                            variant: settingInput.activeFocus ? "focus" : "common"
++                                            variant: settingInput.hovered || settingInput.activeFocus ? "focus" : "internalbg"
+                                             radius: Styling.radius(-2)
+                                             enableShadow: false
++                                            border.width: settingInput.activeFocus ? 2 : 0
++                                            border.color: Styling.srItem("primary")
+                                         }
+                                         onAccepted: settingRow.saveTextValue(text)
+                                     }

@@ -1,0 +1,23 @@
+--- a/modules/bar/BarContent.qml
++++ b/modules/bar/BarContent.qml
+@@ -536,2 +536,9 @@
+ 
++                        YtdButton {
++                            bar: root
++                            layerEnabled: root.shadowsEnabled
++                            startRadius: root.innerRadius
++                            endRadius: root.innerRadius
++                        }
++
+                         ControlsButton {
+@@ -743,2 +750,10 @@
+ 
++                        YtdButton {
++                            bar: root
++                            layerEnabled: root.shadowsEnabled
++                            vertical: true
++                            startRadius: root.innerRadius
++                            endRadius: root.innerRadius
++                        }
++
+                         ControlsButton {

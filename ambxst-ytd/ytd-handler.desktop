@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=YTD
+Type=Application
+Exec=/usr/bin/env python3 "@YTD_BRIDGE@" %u
+StartupNotify=false
+MimeType=x-scheme-handler/ytd;
+Icon=@YTD_ICON@
+

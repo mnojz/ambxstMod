@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Axenide/Ambxst/dev/docs/mods/settings.schema.json",
+  "version": 1,
+  "fields": [
+    {
+      "key": "overlayBgColor",
+      "label": "Selection fill color",
+      "description": "Background color of the selection rectangle, as an ARGB hex color (e.g. #445b93d3).",
+      "type": "string",
+      "default": "#445b93d3"
+    },
+    {
+      "key": "overlayBorderColor",
+      "label": "Selection border color",
+      "description": "Border color of the selection rectangle, as an ARGB hex color (e.g. #adaac7fc).",
+      "type": "string",
+      "default": "#adaac7fc"
+    },
+    {
+      "key": "overlayBorderWidth",
+      "label": "Selection border width",
+      "description": "Thickness of the selection rectangle border, in pixels.",
+      "type": "integer",
+      "default": 2,
+      "minimum": 0,
+      "maximum": 20
+    },
+    {
+      "key": "overlayRadius",
+      "label": "Selection corner radius",
+      "description": "Corner radius of the selection rectangle, in pixels.",
+      "type": "integer",
+      "default": 8,
+      "minimum": 0,
+      "maximum": 100
+    }
+  ]
+}

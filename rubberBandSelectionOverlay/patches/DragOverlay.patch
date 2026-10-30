@@ -1,0 +1,32 @@
+diff --git a/shell.qml b/shell.qml
+index 888996d..2cc8940 100644
+--- a/shell.qml
++++ b/shell.qml
+@@ -6,6 +6,7 @@
+ import QtQuick
+ import Quickshell
+ import Quickshell.Wayland
++import "./mods/mnojz.dragoverlay/payload"
+ import qs.modules.bar
+ import qs.modules.bar.workspaces
+ import qs.modules.notifications
+@@ -62,6 +63,19 @@ ShellRoot {
+         }
+     }
+ 
++    Variants {
++        model: Quickshell.screens
++
++        Loader {
++            id: dragOverlayLoader
++            active: true
++            required property ShellScreen modelData
++            sourceComponent: DragOverlay {
++                targetScreen: dragOverlayLoader.modelData
++            }
++        }
++    }
++
+     // Visual panel & reservations
+     Variants {
+         model: Quickshell.screens
