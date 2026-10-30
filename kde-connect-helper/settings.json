@@ -25,36 +25,6 @@
       "default": false
     },
     {
-      "key": "showPing",
-      "label": "Show ping action",
-      "type": "boolean",
-      "default": true
-    },
-    {
-      "key": "showRing",
-      "label": "Show ring action",
-      "type": "boolean",
-      "default": true
-    },
-    {
-      "key": "showFileShare",
-      "label": "Show file sharing",
-      "type": "boolean",
-      "default": true
-    },
-    {
-      "key": "showTextShare",
-      "label": "Show text sharing",
-      "type": "boolean",
-      "default": true
-    },
-    {
-      "key": "showStatusLabels",
-      "label": "Show status labels",
-      "type": "boolean",
-      "default": true
-    },
-    {
       "key": "showTooltips",
       "label": "Show tooltips",
       "type": "boolean",

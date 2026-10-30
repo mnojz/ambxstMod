@@ -144,13 +144,13 @@ Item {
         if (!device || !device.reachable)
             return "";
         const actions = [];
-        if (KdeConnectService.showPing && !device.supportsPing)
+        if (!device.supportsPing)
             actions.push(I18n.t("kde_connect_helper.ping"));
-        if (KdeConnectService.showRing && !device.supportsRing)
+        if (!device.supportsRing)
             actions.push(I18n.t("kde_connect_helper.ring"));
-        if (KdeConnectService.showFileShare && !device.supportsShare)
+        if (!device.supportsShare)
             actions.push(I18n.t("kde_connect_helper.send_file"));
-        if (KdeConnectService.showTextShare && !device.supportsText)
+        if (!device.supportsText)
             actions.push(I18n.t("kde_connect_helper.share_text"));
         return actions.join(", ");
     }
@@ -584,16 +584,6 @@ Item {
                         }
                         Text {
                             Layout.fillWidth: true
-                            visible: KdeConnectService.showStatusLabels
-                            text: root.device?.reachable ? I18n.t("kde_connect_helper.device.connected")
-                                : I18n.t("kde_connect_helper.device.offline")
-                            color: Colors.overBackground
-                            opacity: 0.72
-                            font.family: Styling.defaultFont
-                            font.pixelSize: Styling.fontSize(-1)
-                        }
-                        Text {
-                            Layout.fillWidth: true
                             text: root.hasBattery
                                 ? I18n.t("kde_connect_helper.battery_value", Math.round(root.device.battery),
                                     root.device.charging ? I18n.t("kde_connect_helper.charging") : "")
@@ -622,7 +612,6 @@ Item {
                     rowSpacing: 6
                     HelperButton {
                         Layout.fillWidth: true
-                        visible: KdeConnectService.showPing
                         iconText: Icons.paperPlane
                         labelText: I18n.t("kde_connect_helper.ping")
                         enabled: !!root.device?.reachable && !!root.device?.supportsPing && !KdeConnectService.activeRequest
@@ -630,7 +619,6 @@ Item {
                     }
                     HelperButton {
                         Layout.fillWidth: true
-                        visible: KdeConnectService.showRing
                         iconText: Icons.bellRinging
                         labelText: I18n.t("kde_connect_helper.ring")
                         enabled: !!root.device?.reachable && !!root.device?.supportsRing && !KdeConnectService.activeRequest
@@ -638,7 +626,6 @@ Item {
                     }
                     HelperButton {
                         Layout.fillWidth: true
-                        visible: KdeConnectService.showFileShare
                         iconText: Icons.file
                         labelText: I18n.t("kde_connect_helper.send_file")
                         enabled: !!root.device?.reachable && !!root.device?.supportsShare && !KdeConnectService.activeRequest
@@ -646,7 +633,6 @@ Item {
                     }
                     HelperButton {
                         Layout.fillWidth: true
-                        visible: KdeConnectService.showTextShare
                         iconText: Icons.clip
                         labelText: I18n.t("kde_connect_helper.share_text")
                         enabled: !!root.device?.reachable && !!root.device?.supportsText && !KdeConnectService.activeRequest
