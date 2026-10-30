@@ -288,42 +288,37 @@ Item {
             }
         }
 
-        // Central icon (centered mobile device glyph, with optional subtle charging badge)
-        Item {
+        // Central icon (centered mobile device glyph)
+        Text {
+            id: centralIcon
             anchors.centerIn: parent
-            width: 20
-            height: 20
+            anchors.verticalCenterOffset: root.deviceCharging ? -1 : 0
+            text: root.mainGlyph
+            font.family: Icons.font
+            font.pixelSize: (root.hasBattery && !!root.device?.reachable) ? 14 : 17
+            color: root.popupOpen ? buttonBackground.item : Styling.srItem("overprimary")
 
-            Text {
-                id: centralIcon
-                anchors.centerIn: parent
-                text: root.mainGlyph
-                font.family: Icons.font
-                font.pixelSize: (root.hasBattery && !!root.device?.reachable) ? 14 : 17
-                color: root.popupOpen ? buttonBackground.item : Styling.srItem("overprimary")
-
-                Behavior on color {
-                    enabled: Config.animDuration > 0
-                    ColorAnimation { duration: Config.animDuration / 2 }
-                }
+            Behavior on color {
+                enabled: Config.animDuration > 0
+                ColorAnimation { duration: Config.animDuration / 2 }
             }
+        }
 
-            Text {
-                id: chargingBadge
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.topMargin: -2
-                anchors.rightMargin: -3
-                visible: root.deviceCharging
-                text: Icons.lightning
-                font.family: Icons.font
-                font.pixelSize: 9
-                color: root.popupOpen ? buttonBackground.item : Colors.green
+        // Charging badge centered at bottom between the two ends of the circular charge gauge
+        Text {
+            id: chargingBadge
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 2
+            visible: root.deviceCharging
+            text: Icons.lightning
+            font.family: Icons.font
+            font.pixelSize: 9
+            color: root.popupOpen ? buttonBackground.item : Colors.green
 
-                Behavior on color {
-                    enabled: Config.animDuration > 0
-                    ColorAnimation { duration: Config.animDuration / 2 }
-                }
+            Behavior on color {
+                enabled: Config.animDuration > 0
+                ColorAnimation { duration: Config.animDuration / 2 }
             }
         }
 
