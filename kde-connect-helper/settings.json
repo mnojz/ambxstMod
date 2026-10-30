@@ -23,12 +23,6 @@
       "description": "Hide the separate KDE Connect status icon from the system tray.",
       "type": "boolean",
       "default": false
-    },
-    {
-      "key": "showTooltips",
-      "label": "Show tooltips",
-      "type": "boolean",
-      "default": true
     }
   ]
 }

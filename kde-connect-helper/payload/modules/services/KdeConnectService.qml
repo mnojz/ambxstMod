@@ -12,7 +12,6 @@ Singleton {
 
     property string preferredDevice: "auto"
     property int pollingInterval: 15
-    property bool showTooltips: true
     property bool hideKdeConnectTrayIcon: false
 
     property bool installed: false
@@ -59,7 +58,6 @@ Singleton {
         switch (key) {
         case "preferredDevice": preferredDevice = String(value || "auto"); break;
         case "pollingInterval": pollingInterval = Math.max(5, Math.min(300, Number(value) || 15)); break;
-        case "showTooltips": showTooltips = !!value; break;
         case "hideKdeConnectTrayIcon": hideKdeConnectTrayIcon = !!value; break;
         }
     }

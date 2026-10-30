@@ -343,7 +343,7 @@ Item {
     }
 
     StyledToolTip {
-        show: KdeConnectService.showTooltips && root.isHovered && !root.popupOpen
+        show: root.isHovered && !root.popupOpen
         tooltipText: root.tooltipTitle
         desciription: root.tooltipDescription
     }
