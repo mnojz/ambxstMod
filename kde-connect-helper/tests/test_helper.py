@@ -265,7 +265,7 @@ class PackageIntegrationTests(unittest.TestCase):
         )
         self.assertIn("function isKdeConnectItem", service)
         self.assertIn('identity.includes("kde connect")', service)
-        self.assertIn("return hideKdeConnectTrayIcon && isKdeConnectItem(item);", service)
+        self.assertIn("return isKdeConnectItem(item);", service)
         self.assertIn("visible: !KdeConnectService.hidesTrayItem(root.item)", feature_patch)
 
     def test_tray_patch_only_inserts_lines(self) -> None:

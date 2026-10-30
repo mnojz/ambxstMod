@@ -12,7 +12,6 @@ Singleton {
 
     property string preferredDevice: "auto"
     property int pollingInterval: 15
-    property bool hideKdeConnectTrayIcon: false
 
     property bool installed: false
     property bool daemonRunning: false
@@ -58,7 +57,6 @@ Singleton {
         switch (key) {
         case "preferredDevice": preferredDevice = String(value || "auto"); break;
         case "pollingInterval": pollingInterval = Math.max(5, Math.min(300, Number(value) || 15)); break;
-        case "hideKdeConnectTrayIcon": hideKdeConnectTrayIcon = !!value; break;
         }
     }
 
@@ -77,7 +75,7 @@ Singleton {
     // Called from each system tray delegate, so the tray keeps its own item
     // lists and other mods can patch them without conflicting with this one
     function hidesTrayItem(item) {
-        return hideKdeConnectTrayIcon && isKdeConnectItem(item);
+        return isKdeConnectItem(item);
     }
 
     function loadSettings() {

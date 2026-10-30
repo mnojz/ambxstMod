@@ -16,13 +16,6 @@
       "default": 15,
       "minimum": 5,
       "maximum": 300
-    },
-    {
-      "key": "hideKdeConnectTrayIcon",
-      "label": "Hide KDE Connect tray icon",
-      "description": "Hide the separate KDE Connect status icon from the system tray.",
-      "type": "boolean",
-      "default": false
     }
   ]
 }
