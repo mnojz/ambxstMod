@@ -589,7 +589,7 @@ Item {
                                 text: root.device?.name ?? ""
                                 color: Colors.overBackground
                                 font.family: Styling.defaultFont
-                                font.pixelSize: Styling.fontSize(0)
+                                font.pixelSize: Styling.fontSize(-1)
                                 font.bold: true
                                 elide: Text.ElideRight
                                 verticalAlignment: Text.AlignVCenter
@@ -607,10 +607,10 @@ Item {
 
                                 Text {
                                     text: root.device?.reachable ? I18n.t("kde_connect_helper.device.connected") : I18n.t("kde_connect_helper.device.offline")
-                                    color: Colors.overBackground
-                                    opacity: 0.65
+                                    color: root.device?.reachable ? Colors.green : Colors.outline
                                     font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(-2)
+                                    font.pixelSize: Styling.fontSize(-1)
+                                    font.bold: true
                                     verticalAlignment: Text.AlignVCenter
                                 }
                             }
@@ -644,9 +644,9 @@ Item {
                             Text {
                                 text: "Battery"
                                 color: Colors.overBackground
-                                opacity: 0.8
                                 font.family: Styling.defaultFont
                                 font.pixelSize: Styling.fontSize(-1)
+                                font.bold: true
                                 verticalAlignment: Text.AlignVCenter
                             }
 
@@ -669,7 +669,7 @@ Item {
                                     text: "• Charging"
                                     color: Colors.primary
                                     font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(-2)
+                                    font.pixelSize: Styling.fontSize(-1)
                                     font.bold: true
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -727,9 +727,9 @@ Item {
                             Text {
                                 text: "Mobile Network"
                                 color: Colors.overBackground
-                                opacity: 0.8
                                 font.family: Styling.defaultFont
                                 font.pixelSize: Styling.fontSize(-1)
+                                font.bold: true
                                 verticalAlignment: Text.AlignVCenter
                             }
 
