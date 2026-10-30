@@ -20,30 +20,6 @@
       ]
     },
     {
-      "key": "appearance",
-      "label": "Button appearance",
-      "description": "Choose a compact or detailed bar button.",
-      "type": "enum",
-      "default": "compact",
-      "options": [
-        { "label": "Compact", "value": "compact" },
-        { "label": "Detailed", "value": "detailed" }
-      ]
-    },
-    {
-      "key": "displayMode",
-      "label": "Button content",
-      "description": "Choose the primary content shown in the bar button.",
-      "type": "enum",
-      "default": "icon-only",
-      "options": [
-        { "label": "Icon only", "value": "icon-only" },
-        { "label": "Icon and device", "value": "icon-device" },
-        { "label": "Icon and status", "value": "icon-status" },
-        { "label": "Percentage", "value": "battery" }
-      ]
-    },
-    {
       "key": "preferredDevice",
       "label": "Preferred device",
       "description": "Use auto or select a device from the popup. Device identifiers are stored here.",
@@ -62,17 +38,11 @@
       ]
     },
     {
-      "key": "batteryDisplay",
-      "label": "Battery display",
-      "description": "Choose how battery information appears inside the bar button.",
-      "type": "enum",
-      "default": "outline",
-      "options": [
-        { "label": "Hidden", "value": "hidden" },
-        { "label": "Percentage", "value": "percentage" },
-        { "label": "Circular outline", "value": "outline" },
-        { "label": "Percentage and outline", "value": "percentage-outline" }
-      ]
+      "key": "showBatteryRing",
+      "label": "Show battery gauge",
+      "description": "Show the circular battery gauge around the bar icon when battery information is available.",
+      "type": "boolean",
+      "default": true
     },
     {
       "key": "pollingInterval",
@@ -132,54 +102,6 @@
       "label": "Show tooltips",
       "type": "boolean",
       "default": true
-    },
-    {
-      "key": "ringThickness",
-      "label": "Battery ring thickness",
-      "description": "Set the battery progress outline width from 1 to 6 pixels.",
-      "type": "number",
-      "default": 3,
-      "minimum": 1,
-      "maximum": 6
-    },
-    {
-      "key": "ringColor",
-      "label": "Battery ring color",
-      "description": "Enter a hexadecimal color such as #66bb6a.",
-      "type": "string",
-      "default": "#66bb6a"
-    },
-    {
-      "key": "lowBatteryThreshold",
-      "label": "Low battery threshold",
-      "description": "Use the low battery color at or below this percentage.",
-      "type": "integer",
-      "default": 20,
-      "minimum": 0,
-      "maximum": 50
-    },
-    {
-      "key": "lowBatteryColor",
-      "label": "Low battery color",
-      "description": "Enter a hexadecimal color such as #66bb6a.",
-      "type": "string",
-      "default": "#ef5350"
-    },
-    {
-      "key": "warningBatteryThreshold",
-      "label": "Warning battery threshold",
-      "description": "Use the warning color at or below this percentage.",
-      "type": "integer",
-      "default": 50,
-      "minimum": 20,
-      "maximum": 90
-    },
-    {
-      "key": "warningBatteryColor",
-      "label": "Warning battery color",
-      "description": "Enter a hexadecimal color such as #66bb6a.",
-      "type": "string",
-      "default": "#fbc02d"
     }
   ]
 }

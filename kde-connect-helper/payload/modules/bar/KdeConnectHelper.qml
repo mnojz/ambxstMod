@@ -226,7 +226,7 @@ Item {
             anchors.centerIn: parent
             width: 32
             height: 32
-            visible: root.hasBattery && !!root.device?.reachable && KdeConnectService.batteryDisplay !== "hidden"
+            visible: root.hasBattery && !!root.device?.reachable && KdeConnectService.showBatteryRing
 
             readonly property real batteryPct: Math.max(0, Math.min(100, root.device?.battery ?? 0))
             property real angle: (batteryPct / 100) * (360 - 2 * gapAngle)

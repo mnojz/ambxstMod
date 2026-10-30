@@ -12,11 +12,9 @@ Singleton {
 
     property bool buttonVisible: true
     property string placement: "trailing"
-    property string appearance: "compact"
-    property string displayMode: "icon-only"
     property string preferredDevice: "auto"
     property string primaryClick: "popup"
-    property string batteryDisplay: "outline"
+    property bool showBatteryRing: true
     property int pollingInterval: 15
     property bool hideDisconnected: false
     property bool showPing: true
@@ -26,12 +24,6 @@ Singleton {
     property bool showStatusLabels: true
     property bool showTooltips: true
     property bool hideKdeConnectTrayIcon: false
-    property real ringThickness: 3
-    property string ringColor: "#66bb6a"
-    property int lowBatteryThreshold: 20
-    property string lowBatteryColor: "#ef5350"
-    property int warningBatteryThreshold: 50
-    property string warningBatteryColor: "#fbc02d"
 
     property bool installed: false
     property bool daemonRunning: false
@@ -78,11 +70,9 @@ Singleton {
         switch (key) {
         case "buttonVisible": buttonVisible = !!value; break;
         case "placement": placement = String(value); break;
-        case "appearance": appearance = String(value); break;
-        case "displayMode": displayMode = String(value); break;
         case "preferredDevice": preferredDevice = String(value || "auto"); break;
         case "primaryClick": primaryClick = String(value); break;
-        case "batteryDisplay": batteryDisplay = String(value); break;
+        case "showBatteryRing": showBatteryRing = !!value; break;
         case "pollingInterval": pollingInterval = Math.max(5, Math.min(300, Number(value) || 15)); break;
         case "hideDisconnected": hideDisconnected = !!value; break;
         case "showPing": showPing = !!value; break;
@@ -92,16 +82,6 @@ Singleton {
         case "showStatusLabels": showStatusLabels = !!value; break;
         case "showTooltips": showTooltips = !!value; break;
         case "hideKdeConnectTrayIcon": hideKdeConnectTrayIcon = !!value; break;
-        case "ringThickness": ringThickness = Math.max(1, Math.min(6, Number(value) || 3)); break;
-        case "ringColor": ringColor = validColor(value, "#66bb6a"); break;
-        case "lowBatteryThreshold": {
-            const threshold = Number(value);
-            lowBatteryThreshold = Math.max(0, Math.min(50, Number.isFinite(threshold) ? threshold : 20));
-            break;
-        }
-        case "lowBatteryColor": lowBatteryColor = validColor(value, "#ef5350"); break;
-        case "warningBatteryThreshold": warningBatteryThreshold = Math.max(lowBatteryThreshold, Math.min(90, Number(value) || 50)); break;
-        case "warningBatteryColor": warningBatteryColor = validColor(value, "#fbc02d"); break;
         }
     }
 

@@ -252,11 +252,11 @@ class PackageIntegrationTests(unittest.TestCase):
             widget,
         )
 
-    def test_zero_low_battery_threshold_remains_valid(self) -> None:
+    def test_battery_ring_setting_exists(self) -> None:
         service = (PACKAGE / "payload/modules/services/KdeConnectService.qml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Number.isFinite(threshold) ? threshold : 20", service)
+        self.assertIn('case "showBatteryRing": showBatteryRing = !!value; break;', service)
 
     def test_tray_setting_hides_only_kde_connect_items(self) -> None:
         feature_patch = (PACKAGE / "patches/feature.patch").read_text(encoding="utf-8")
