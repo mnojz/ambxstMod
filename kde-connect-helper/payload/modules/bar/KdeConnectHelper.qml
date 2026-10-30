@@ -698,26 +698,26 @@ Item {
 
                                 Item {
                                     anchors.centerIn: parent
-                                    width: 18
-                                    height: 14
+                                    width: 14
+                                    height: 12
 
                                     Rectangle {
-                                        x: 0; y: 10; width: 3; height: 4; radius: 1
+                                        x: 0; y: 9; width: 2; height: 3; radius: 1
                                         color: (root.device?.cellularStrength >= 1) ? Colors.primary : Colors.overBackground
                                         opacity: (root.device?.cellularStrength >= 1) ? 1.0 : 0.25
                                     }
                                     Rectangle {
-                                        x: 5; y: 7; width: 3; height: 7; radius: 1
+                                        x: 4; y: 6; width: 2; height: 6; radius: 1
                                         color: (root.device?.cellularStrength >= 2) ? Colors.primary : Colors.overBackground
                                         opacity: (root.device?.cellularStrength >= 2) ? 1.0 : 0.25
                                     }
                                     Rectangle {
-                                        x: 10; y: 4; width: 3; height: 10; radius: 1
+                                        x: 8; y: 3; width: 2; height: 9; radius: 1
                                         color: (root.device?.cellularStrength >= 3) ? Colors.primary : Colors.overBackground
                                         opacity: (root.device?.cellularStrength >= 3) ? 1.0 : 0.25
                                     }
                                     Rectangle {
-                                        x: 15; y: 0; width: 3; height: 14; radius: 1
+                                        x: 12; y: 0; width: 2; height: 12; radius: 1
                                         color: (root.device?.cellularStrength >= 4) ? Colors.primary : Colors.overBackground
                                         opacity: (root.device?.cellularStrength >= 4) ? 1.0 : 0.25
                                     }
