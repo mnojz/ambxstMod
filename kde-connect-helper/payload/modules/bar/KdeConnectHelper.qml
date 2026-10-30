@@ -134,7 +134,7 @@ Item {
     function batteryIcon() {
         if (root.deviceCharging)
             return Icons.lightning;
-        const b = root.deviceBattery;
+        const b = root.device?.battery ?? 0;
         if (b > 80)
             return Icons.batteryFull;
         if (b > 50)
@@ -576,7 +576,9 @@ Item {
 
                     ColumnLayout {
                         id: deviceColumn
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
                         anchors.margins: 12
                         spacing: 10
 
@@ -661,7 +663,7 @@ Item {
                                 spacing: 6
 
                                 Text {
-                                    text: Math.round(root.deviceBattery) + "%"
+                                    text: Math.round(root.device?.battery ?? 0) + "%"
                                     color: Colors.overBackground
                                     font.family: Styling.defaultFont
                                     font.pixelSize: Styling.fontSize(-1)
@@ -699,22 +701,25 @@ Item {
                                 width: 18
                                 height: 14
 
-                                Row {
-                                    spacing: 2
-                                    anchors.bottom: parent.bottom
-                                    anchors.left: parent.left
-
-                                    Repeater {
-                                        model: 4
-                                        Rectangle {
-                                            width: 3
-                                            height: 4 + index * 3
-                                            radius: 1
-                                            anchors.bottom: parent.bottom
-                                            color: (root.device?.cellularStrength >= (index + 1)) ? Colors.primary : Colors.overBackground
-                                            opacity: (root.device?.cellularStrength >= (index + 1)) ? 1.0 : 0.2
-                                        }
-                                    }
+                                Rectangle {
+                                    x: 0; y: 10; width: 3; height: 4; radius: 1
+                                    color: (root.device?.cellularStrength >= 1) ? Colors.primary : Colors.overBackground
+                                    opacity: (root.device?.cellularStrength >= 1) ? 1.0 : 0.25
+                                }
+                                Rectangle {
+                                    x: 5; y: 7; width: 3; height: 7; radius: 1
+                                    color: (root.device?.cellularStrength >= 2) ? Colors.primary : Colors.overBackground
+                                    opacity: (root.device?.cellularStrength >= 2) ? 1.0 : 0.25
+                                }
+                                Rectangle {
+                                    x: 10; y: 4; width: 3; height: 10; radius: 1
+                                    color: (root.device?.cellularStrength >= 3) ? Colors.primary : Colors.overBackground
+                                    opacity: (root.device?.cellularStrength >= 3) ? 1.0 : 0.25
+                                }
+                                Rectangle {
+                                    x: 15; y: 0; width: 3; height: 14; radius: 1
+                                    color: (root.device?.cellularStrength >= 4) ? Colors.primary : Colors.overBackground
+                                    opacity: (root.device?.cellularStrength >= 4) ? 1.0 : 0.25
                                 }
                             }
 

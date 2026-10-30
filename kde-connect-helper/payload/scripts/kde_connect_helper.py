@@ -324,28 +324,12 @@ def scan(request: dict[str, Any]) -> dict[str, Any]:
                 if strength_raw.lstrip("-").isdigit():
                     cellular_strength = int(strength_raw)
 
-            # Storage details (from SFTP mount)
             has_sftp = has_plugin(device_id, "kdeconnect_sftp")
             is_mounted = False
-            storage_total = 0
-            storage_free = 0
-            storage_used = 0
             if has_sftp:
                 is_mounted = device_value(
                     device_id, "org.kde.kdeconnect.device.sftp.isMounted", "/sftp"
                 ) == "true"
-                if is_mounted:
-                    mount_point = device_value(
-                        device_id, "org.kde.kdeconnect.device.sftp.mountPoint", "/sftp"
-                    )
-                    if mount_point and os.path.isdir(mount_point):
-                        try:
-                            st = os.statvfs(mount_point)
-                            storage_total = st.f_blocks * st.f_frsize
-                            storage_free = st.f_bavail * st.f_frsize
-                            storage_used = max(0, storage_total - storage_free)
-                        except OSError:
-                            pass
 
             devices.append(
                 {
@@ -362,9 +346,6 @@ def scan(request: dict[str, Any]) -> dict[str, Any]:
                     "cellularStrength": cellular_strength,
                     "hasConnectivity": has_connectivity and (bool(cellular_type) or cellular_strength >= 0),
                     "isMounted": is_mounted,
-                    "storageTotal": storage_total,
-                    "storageFree": storage_free,
-                    "storageUsed": storage_used,
                     "supportsPing": has_plugin(device_id, "kdeconnect_ping"),
                     "supportsRing": has_plugin(device_id, "kdeconnect_findmyphone"),
                     "supportsShare": has_plugin(device_id, "kdeconnect_share"),
