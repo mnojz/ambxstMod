@@ -20,9 +20,6 @@ Singleton {
     property string dbusExecutable: ""
     property string launcherKind: "none"
     property string launcherExecutable: ""
-    property string autostartState: "unavailable"
-    property string autostartMethod: "manual"
-    property string autostartPath: ""
     property var devices: []
     property bool scanning: false
     property bool busy: false
@@ -144,10 +141,6 @@ Singleton {
         send("choose_files", { title: String(title || "KDE Connect") }, 310000);
     }
 
-    function setAutostart(enabled) {
-        send(enabled ? "enable_autostart" : "disable_autostart", {}, 15000);
-    }
-
     function runAction(kind, extra) {
         if (!selectedDevice) {
             setMessage("no_selected_device", true);
@@ -158,8 +151,6 @@ Singleton {
             data.path = String(extra ?? "");
         if (kind === "share_files")
             data.paths = Array.isArray(extra) ? extra : [];
-        if (kind === "share_text")
-            data.text = String(extra ?? "");
         const timeout = kind === "share_files"
             ? Math.min(120000, 10000 + data.paths.length * 6000) : 15000;
         send("action", data, timeout);
@@ -178,9 +169,6 @@ Singleton {
         dbusExecutable = String(data.qdbus ?? "");
         launcherKind = String(data.launcher?.kind ?? "none");
         launcherExecutable = String(data.launcher?.path ?? "");
-        autostartState = String(data.autostart?.state ?? "unavailable");
-        autostartMethod = String(data.autostart?.method ?? "manual");
-        autostartPath = String(data.autostart?.path ?? "");
         devices = Array.isArray(data.devices) ? data.devices : [];
         refreshed();
     }
