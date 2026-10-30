@@ -13,7 +13,7 @@ Singleton {
     property bool buttonVisible: true
     property string placement: "trailing"
     property string appearance: "compact"
-    property string displayMode: "icon-status"
+    property string displayMode: "icon-only"
     property string preferredDevice: "auto"
     property string primaryClick: "popup"
     property string batteryDisplay: "outline"

@@ -35,7 +35,7 @@
       "label": "Button content",
       "description": "Choose the primary content shown in the bar button.",
       "type": "enum",
-      "default": "icon-status",
+      "default": "icon-only",
       "options": [
         { "label": "Icon only", "value": "icon-only" },
         { "label": "Icon and device", "value": "icon-device" },

@@ -19,12 +19,14 @@ Item {
     property var pendingFiles: []
     property string confirmAction: ""
     property int installStep: 0
+    property bool isHovered: false
+    readonly property bool popupOpen: helperPopup.isOpen
+
+    HoverHandler {
+        onHoveredChanged: root.isHovered = hovered
+    }
 
     readonly property var device: KdeConnectService.selectedDevice
-    readonly property bool showPercent: KdeConnectService.batteryDisplay === "percentage"
-        || KdeConnectService.batteryDisplay === "percentage-outline"
-    readonly property bool showBatteryOutline: KdeConnectService.batteryDisplay === "outline"
-        || KdeConnectService.batteryDisplay === "percentage-outline"
     readonly property bool hasBattery: !!device?.hasBattery
     readonly property string statusKey: {
         if (!KdeConnectService.installed)
@@ -45,11 +47,7 @@ Item {
     readonly property string batteryPercentage: hasBattery
         ? Math.round(device.battery) + "%" : ""
     readonly property bool deviceCharging: hasBattery && !!device?.reachable && !!device?.charging
-    readonly property bool batteryGlyphIsPercentage: KdeConnectService.displayMode === "battery"
-        && batteryPercentage.length > 0
-    readonly property string mainGlyph: batteryGlyphIsPercentage
-        ? batteryPercentage
-        : Icons.deviceMobile
+    readonly property string mainGlyph: Icons.deviceMobile
     readonly property string tooltipTitle: device?.name ?? I18n.t("kde_connect_helper.title")
     readonly property string tooltipDescription: {
         const details = [statusText];
@@ -61,42 +59,31 @@ Item {
         }
         return details.join(" · ");
     }
-    readonly property string selectedContent: {
-        if (KdeConnectService.displayMode === "icon-device")
-            return device?.name ?? I18n.t("kde_connect_helper.no_device");
-        if (KdeConnectService.displayMode === "icon-status")
-            return statusText;
-        if (KdeConnectService.displayMode === "battery")
-            return "";
-        return "";
-    }
-    readonly property string detailedContent: {
-        if (KdeConnectService.displayMode === "battery" && device) {
-            return device.name;
-        }
-        if (selectedContent.length > 0 && showPercent && batteryPercentage.length > 0)
-            return selectedContent + " · " + batteryPercentage;
-        return selectedContent;
-    }
-    readonly property bool expandedButton: !vertical
-        && KdeConnectService.appearance === "detailed"
-        && KdeConnectService.displayMode !== "icon-only"
-        && detailedContent.length > 0
-    readonly property string buttonLabel: {
-        if (expandedButton)
-            return detailedContent;
-        if (!vertical && KdeConnectService.appearance === "compact"
-                && KdeConnectService.displayMode !== "icon-only"
-                && KdeConnectService.displayMode !== "battery")
-            return selectedContent;
-        return "";
-    }
-    readonly property bool compactLabel: !expandedButton && buttonLabel.length > 0
 
-    implicitWidth: vertical ? 36 : (expandedButton ? 148 : (compactLabel ? 112 : 36))
+    function getBatteryColor() {
+        if (!root.hasBattery)
+            return Colors.overBackground;
+
+        const pct = root.device?.battery ?? 0;
+        if (pct <= 15)
+            return Colors.red;
+        if (pct >= 85)
+            return Colors.green;
+
+        // Linear interpolation between red (15%) and green (85%) matching BatteryIndicator
+        const ratio = (pct - 15) / (85 - 15);
+        return Qt.rgba(
+            Colors.red.r + (Colors.green.r - Colors.red.r) * ratio,
+            Colors.red.g + (Colors.green.g - Colors.red.g) * ratio,
+            Colors.red.b + (Colors.green.b - Colors.red.b) * ratio,
+            1
+        );
+    }
+
+    implicitWidth: 36
     implicitHeight: 36
-    Layout.preferredWidth: implicitWidth
-    Layout.preferredHeight: implicitHeight
+    Layout.preferredWidth: 36
+    Layout.preferredHeight: 36
     Layout.fillWidth: vertical
     Layout.fillHeight: !vertical
     visible: KdeConnectService.shouldShowButton
@@ -210,210 +197,139 @@ Item {
         }
     }
 
-    Button {
-        id: barButton
+    StyledRect {
+        id: buttonBackground
+        variant: root.popupOpen ? "primary" : "bg"
         anchors.fill: parent
-        hoverEnabled: true
-        activeFocusOnTab: true
-        Accessible.name: I18n.t("kde_connect_helper.accessible.button")
-        Accessible.description: root.tooltipTitle + ". " + root.tooltipDescription
-        onClicked: root.openPrimary()
+        enableShadow: root.layerEnabled
+        topLeftRadius: root.vertical ? root.startRadius : root.startRadius
+        topRightRadius: root.vertical ? root.startRadius : root.endRadius
+        bottomLeftRadius: root.vertical ? root.endRadius : root.startRadius
+        bottomRightRadius: root.vertical ? root.endRadius : root.endRadius
 
-        HoverHandler {
-            cursorShape: Qt.PointingHandCursor
+        // Background highlight on hover
+        Rectangle {
+            anchors.fill: parent
+            color: Styling.srItem("overprimary")
+            opacity: root.popupOpen ? 0 : (root.isHovered ? 0.25 : 0)
+            radius: parent.radius ?? 0
+
+            Behavior on opacity {
+                enabled: Config.animDuration > 0
+                NumberAnimation { duration: Config.animDuration / 2 }
+            }
         }
 
-        background: StyledRect {
-            id: buttonBackground
-            variant: helperPopup.isOpen ? "primary" : "bg"
-            enableShadow: root.layerEnabled
-            topLeftRadius: root.vertical ? root.startRadius : root.startRadius
-            topRightRadius: root.vertical ? root.startRadius : root.endRadius
-            bottomLeftRadius: root.vertical ? root.endRadius : root.startRadius
-            bottomRightRadius: root.vertical ? root.endRadius : root.endRadius
+        // Circular progress indicator (matching BatteryIndicator style)
+        Item {
+            id: progressCanvas
+            anchors.centerIn: parent
+            width: 32
+            height: 32
+            visible: root.hasBattery && !!root.device?.reachable && KdeConnectService.batteryDisplay !== "hidden"
 
-            Rectangle {
-                anchors.fill: parent
-                color: Styling.srItem("overprimary")
-                opacity: helperPopup.isOpen ? 0
-                    : (barButton.down ? 0.5 : (barButton.hovered || barButton.activeFocus ? 0.25 : 0))
-                radius: parent.radius ?? 0
-
-                Behavior on opacity {
-                    enabled: Config.animDuration > 0
-                    NumberAnimation { duration: Config.animDuration / 2 }
-                }
-            }
+            readonly property real batteryPct: Math.max(0, Math.min(100, root.device?.battery ?? 0))
+            property real angle: (batteryPct / 100) * (360 - 2 * gapAngle)
+            property real radius: 12
+            property real lineWidth: 3
+            property real gapAngle: 45
 
             Canvas {
-                id: batteryCanvas
+                id: canvas
                 anchors.fill: parent
-                visible: root.showBatteryOutline && root.hasBattery
                 antialiasing: true
-                z: 2
-
-                function appendArc(points, centerX, centerY, radius, startAngle, endAngle) {
-                    if (radius <= 0) {
-                        points.push({ x: centerX, y: centerY });
-                        return;
-                    }
-                    const steps = 8;
-                    for (let step = 1; step <= steps; step++) {
-                        const angle = startAngle + (endAngle - startAngle) * step / steps;
-                        points.push({
-                            x: centerX + Math.cos(angle) * radius,
-                            y: centerY + Math.sin(angle) * radius
-                        });
-                    }
-                }
-
-                function buttonOutlinePoints(inset, topLeft, topRight, bottomRight, bottomLeft) {
-                    const left = inset;
-                    const top = inset;
-                    const right = width - inset;
-                    const bottom = height - inset;
-                    const maxRadius = Math.min((right - left) / 2, (bottom - top) / 2);
-                    const tl = Math.max(0, Math.min(topLeft - inset, maxRadius));
-                    const tr = Math.max(0, Math.min(topRight - inset, maxRadius));
-                    const br = Math.max(0, Math.min(bottomRight - inset, maxRadius));
-                    const bl = Math.max(0, Math.min(bottomLeft - inset, maxRadius));
-                    const points = [{ x: (left + right) / 2, y: top }, { x: right - tr, y: top }];
-                    appendArc(points, right - tr, top + tr, tr, -Math.PI / 2, 0);
-                    points.push({ x: right, y: bottom - br });
-                    appendArc(points, right - br, bottom - br, br, 0, Math.PI / 2);
-                    points.push({ x: left + bl, y: bottom });
-                    appendArc(points, left + bl, bottom - bl, bl, Math.PI / 2, Math.PI);
-                    points.push({ x: left, y: top + tl });
-                    appendArc(points, left + tl, top + tl, tl, Math.PI, Math.PI * 1.5);
-                    points.push({ x: (left + right) / 2, y: top });
-                    return points;
-                }
-
-                function strokeFraction(context, points, fraction) {
-                    let total = 0;
-                    for (let index = 1; index < points.length; index++)
-                        total += Math.hypot(points[index].x - points[index - 1].x,
-                            points[index].y - points[index - 1].y);
-                    let remaining = total * Math.max(0, Math.min(1, fraction));
-                    context.beginPath();
-                    context.moveTo(points[0].x, points[0].y);
-                    for (let index = 1; index < points.length && remaining > 0; index++) {
-                        const previous = points[index - 1];
-                        const current = points[index];
-                        const length = Math.hypot(current.x - previous.x, current.y - previous.y);
-                        if (remaining >= length) {
-                            context.lineTo(current.x, current.y);
-                            remaining -= length;
-                        } else {
-                            const ratio = length > 0 ? remaining / length : 0;
-                            context.lineTo(previous.x + (current.x - previous.x) * ratio,
-                                previous.y + (current.y - previous.y) * ratio);
-                            remaining = 0;
-                        }
-                    }
-                    context.stroke();
-                }
 
                 onPaint: {
-                    const context = getContext("2d");
-                    context.reset();
-                    const thickness = KdeConnectService.ringThickness;
-                    const inset = thickness / 2;
-                    const topLeft = buttonBackground.topLeftRadius;
-                    const topRight = buttonBackground.topRightRadius;
-                    const bottomRight = buttonBackground.bottomRightRadius;
-                    const bottomLeft = buttonBackground.bottomLeftRadius;
-                    const value = Math.max(0, Math.min(100, root.device?.battery ?? 0));
-                    const points = buttonOutlinePoints(inset, topLeft, topRight, bottomRight, bottomLeft);
-                    context.lineWidth = thickness;
-                    context.lineCap = "round";
-                    context.lineJoin = "round";
-                    context.strokeStyle = Colors.outlineVariant;
-                    strokeFraction(context, points, 1);
-                    context.strokeStyle = value <= KdeConnectService.lowBatteryThreshold
-                        ? KdeConnectService.lowBatteryColor
-                        : (value <= KdeConnectService.warningBatteryThreshold
-                            ? KdeConnectService.warningBatteryColor : KdeConnectService.ringColor);
-                    strokeFraction(context, points, value / 100);
+                    let ctx = getContext("2d");
+                    ctx.reset();
+
+                    let centerX = width / 2;
+                    let centerY = height / 2;
+                    let radius = progressCanvas.radius;
+                    let lineWidth = progressCanvas.lineWidth;
+
+                    ctx.lineCap = "round";
+
+                    // Base start angle (matching CircularControl & BatteryIndicator: bottom + gap)
+                    let baseStartAngle = (Math.PI / 2) + (progressCanvas.gapAngle * Math.PI / 180);
+                    let progressAngleRad = progressCanvas.angle * Math.PI / 180;
+
+                    // Draw background track (remaining part)
+                    let totalAngleRad = (360 - 2 * progressCanvas.gapAngle) * Math.PI / 180;
+
+                    ctx.strokeStyle = Colors.outlineVariant;
+                    ctx.lineWidth = lineWidth;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius, baseStartAngle + progressAngleRad, baseStartAngle + totalAngleRad, false);
+                    ctx.stroke();
+
+                    // Draw progress
+                    if (progressCanvas.angle > 0) {
+                        ctx.strokeStyle = root.getBatteryColor();
+                        ctx.lineWidth = lineWidth;
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, radius, baseStartAngle, baseStartAngle + progressAngleRad, false);
+                        ctx.stroke();
+                    }
                 }
 
-                onWidthChanged: requestPaint()
-                onHeightChanged: requestPaint()
+                Connections {
+                    target: progressCanvas
+                    function onAngleChanged() { canvas.requestPaint(); }
+                }
 
                 Connections {
                     target: KdeConnectService
-                    function onSelectedDeviceChanged() { batteryCanvas.requestPaint(); }
-                    function onRingThicknessChanged() { batteryCanvas.requestPaint(); }
-                    function onRingColorChanged() { batteryCanvas.requestPaint(); }
-                    function onLowBatteryThresholdChanged() { batteryCanvas.requestPaint(); }
-                    function onLowBatteryColorChanged() { batteryCanvas.requestPaint(); }
-                    function onWarningBatteryThresholdChanged() { batteryCanvas.requestPaint(); }
-                    function onWarningBatteryColorChanged() { batteryCanvas.requestPaint(); }
+                    function onSelectedDeviceChanged() { canvas.requestPaint(); }
+                    function onDevicesChanged() { canvas.requestPaint(); }
                 }
 
                 Connections {
                     target: root
-                    function onStartRadiusChanged() { batteryCanvas.requestPaint(); }
-                    function onEndRadiusChanged() { batteryCanvas.requestPaint(); }
-                    function onVerticalChanged() { batteryCanvas.requestPaint(); }
-                    function onShowBatteryOutlineChanged() {
-                        if (root.showBatteryOutline)
-                            batteryCanvas.requestPaint();
-                    }
+                    function onDeviceChanged() { canvas.requestPaint(); }
+                }
+            }
+
+            Behavior on angle {
+                enabled: Config.animDuration > 0
+                NumberAnimation {
+                    duration: 400
+                    easing.type: Easing.OutCubic
                 }
             }
         }
 
-        contentItem: RowLayout {
+        // Central icon (centered mobile device glyph, with optional subtle charging badge)
+        Item {
             anchors.centerIn: parent
-            spacing: 5
+            width: 20
+            height: 20
 
-            Item {
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
+            Text {
+                id: centralIcon
+                anchors.centerIn: parent
+                text: root.mainGlyph
+                font.family: Icons.font
+                font.pixelSize: (root.hasBattery && !!root.device?.reachable) ? 14 : 17
+                color: root.popupOpen ? buttonBackground.item : Styling.srItem("overprimary")
 
-                Text {
-                    anchors.centerIn: parent
-                    text: root.mainGlyph
-                    font.family: root.batteryGlyphIsPercentage ? Styling.defaultFont : Icons.font
-                    font.pixelSize: root.batteryGlyphIsPercentage ? Styling.fontSize(-2) : 17
-                    font.bold: root.batteryGlyphIsPercentage
-                    color: helperPopup.isOpen ? buttonBackground.item : Styling.srItem("overprimary")
-
-                    Behavior on color {
-                        enabled: Config.animDuration > 0
-                        ColorAnimation { duration: Config.animDuration / 2 }
-                    }
-                }
-
-                Text {
-                    anchors.top: parent.top
-                    anchors.right: parent.right
-                    anchors.topMargin: 1
-                    anchors.rightMargin: 1
-                    visible: root.deviceCharging
-                    text: Icons.lightning
-                    font.family: Icons.font
-                    font.pixelSize: 9
-                    color: helperPopup.isOpen ? buttonBackground.item : Styling.srItem("overprimary")
-
-                    Behavior on color {
-                        enabled: Config.animDuration > 0
-                        ColorAnimation { duration: Config.animDuration / 2 }
-                    }
+                Behavior on color {
+                    enabled: Config.animDuration > 0
+                    ColorAnimation { duration: Config.animDuration / 2 }
                 }
             }
 
             Text {
-                visible: root.buttonLabel.length > 0
-                Layout.preferredWidth: root.expandedButton ? 105 : 72
-                text: root.buttonLabel
-                color: helperPopup.isOpen ? buttonBackground.item : Styling.srItem("overprimary")
-                font.family: Styling.defaultFont
-                font.pixelSize: Styling.fontSize(-1)
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignLeft
-                verticalAlignment: Text.AlignVCenter
+                id: chargingBadge
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: -2
+                anchors.rightMargin: -3
+                visible: root.deviceCharging
+                text: Icons.lightning
+                font.family: Icons.font
+                font.pixelSize: 9
+                color: root.popupOpen ? buttonBackground.item : Colors.green
 
                 Behavior on color {
                     enabled: Config.animDuration > 0
@@ -422,11 +338,18 @@ Item {
             }
         }
 
-        StyledToolTip {
-            show: KdeConnectService.showTooltips && barButton.hovered && !helperPopup.isOpen
-            tooltipText: root.tooltipTitle
-            desciription: root.tooltipDescription
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: false
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.openPrimary()
         }
+    }
+
+    StyledToolTip {
+        show: KdeConnectService.showTooltips && root.isHovered && !root.popupOpen
+        tooltipText: root.tooltipTitle
+        desciription: root.tooltipDescription
     }
 
     BarPopup {
@@ -444,8 +367,6 @@ Item {
         onIsOpenChanged: {
             if (isOpen)
                 Qt.callLater(() => refreshButton.forceActiveFocus());
-            else
-                Qt.callLater(() => barButton.forceActiveFocus());
         }
 
         Flickable {

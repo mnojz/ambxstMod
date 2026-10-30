@@ -223,40 +223,20 @@ class PackageIntegrationTests(unittest.TestCase):
     def test_bar_widget_exports_loader_dimensions(self) -> None:
         widget = (PACKAGE / "payload/modules/bar/KdeConnectHelper.qml").read_text(encoding="utf-8")
         feature_patch = (PACKAGE / "patches/feature.patch").read_text(encoding="utf-8")
-        self.assertIn("implicitWidth: vertical ? 36", widget)
+        self.assertIn("implicitWidth: 36", widget)
         self.assertIn("implicitHeight: 36", widget)
         self.assertEqual(feature_patch.count("Layout.preferredWidth: active ?"), 4)
         self.assertEqual(feature_patch.count("Layout.preferredHeight: active ?"), 4)
 
     def test_bar_widget_uses_native_ambxst_states(self) -> None:
         widget = (PACKAGE / "payload/modules/bar/KdeConnectHelper.qml").read_text(encoding="utf-8")
-        self.assertIn('variant: helperPopup.isOpen ? "primary" : "bg"', widget)
+        self.assertIn('variant: root.popupOpen ? "primary" : "bg"', widget)
         self.assertIn('color: Styling.srItem("overprimary")', widget)
-        self.assertIn("barButton.hovered || barButton.activeFocus", widget)
+        self.assertIn("opacity: root.popupOpen ? 0 : (root.isHovered ? 0.25 : 0)", widget)
         self.assertIn("anchorItem: buttonBackground", widget)
-        self.assertIn("function buttonOutlinePoints", widget)
-        self.assertIn("function strokeFraction", widget)
-        self.assertIn("const topLeft = buttonBackground.topLeftRadius", widget)
-        self.assertIn("const bottomRight = buttonBackground.bottomRightRadius", widget)
-        self.assertNotIn("setLineDash", widget)
-        self.assertIn("strokeFraction(context, points, value / 100)", widget)
-        self.assertIn(
-            "anchors.fill: parent\n                visible: root.showBatteryOutline && root.hasBattery",
-            widget,
-        )
-        self.assertIn("readonly property string buttonLabel", widget)
-        self.assertIn("readonly property string selectedContent", widget)
-        self.assertIn('KdeConnectService.appearance === "compact"', widget)
-        self.assertIn("readonly property bool batteryGlyphIsPercentage", widget)
-        self.assertIn(
-            'KdeConnectService.displayMode === "battery"\n        && batteryPercentage.length > 0',
-            widget,
-        )
-        self.assertIn("? batteryPercentage", widget)
-        self.assertIn(": Icons.deviceMobile", widget)
-        self.assertIn('&& KdeConnectService.displayMode !== "battery"', widget)
-        self.assertIn("return device.name;", widget)
-        self.assertIn("KdeConnectService.warningBatteryColor", widget)
+        self.assertIn("function getBatteryColor()", widget)
+        self.assertIn("id: progressCanvas", widget)
+        self.assertIn("id: centralIcon", widget)
         self.assertIn("text: root.mainGlyph", widget)
         self.assertIn("visible: root.deviceCharging", widget)
         self.assertIn("hasBattery && !!device?.reachable && !!device?.charging", widget)
@@ -267,9 +247,6 @@ class PackageIntegrationTests(unittest.TestCase):
         self.assertIn("id: helperButtonBackground", widget)
         self.assertIn("color: helperButtonBackground.item", widget)
         self.assertIn("control.danger ? Colors.red : helperButtonBackground.item", widget)
-        self.assertIn("function onStartRadiusChanged()", widget)
-        self.assertIn("function onEndRadiusChanged()", widget)
-        self.assertIn("function onVerticalChanged()", widget)
         self.assertIn(
             'variant: shareText.hovered || shareText.activeFocus ? "focus" : "internalbg"',
             widget,
