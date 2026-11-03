@@ -300,7 +300,9 @@ Singleton {
                         root.itemCount = Math.max(root.itemCount, Number(event.count || 0));
                         root.downloaded = Number(event.downloaded || 0);
                         root.total = Number(event.total || 0);
-                        root.progress = Math.max(0, Math.min(100, Number(event.percent || 0)));
+                        var nextPercent = Math.max(0, Math.min(100, Number(event.percent || 0)));
+                        if (nextPercent > root.progress)
+                            root.progress = nextPercent;
                         root.speed = Number(event.speed || 0);
                         root.eta = Number(event.eta || 0);
                         if (event.event === "finished")

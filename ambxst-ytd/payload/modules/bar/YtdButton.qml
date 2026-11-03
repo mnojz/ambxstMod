@@ -28,7 +28,7 @@ Item {
     // appearance off isOpen alone would then pin the button to the active
     // styling with no popup visible.
     readonly property bool popupOpen: popup.isOpen && popup.visible
-    readonly property bool barActive: popupOpen || YtdService.running
+    readonly property bool barActive: popupOpen
     readonly property bool activeCardVisible: YtdService.state === "starting"
         || YtdService.state === "downloading" || YtdService.state === "error"
         || YtdService.state === "cancelled"
@@ -133,12 +133,8 @@ Item {
         }
     }
 
-    Connections {
-        target: YtdService
-        function onDownloadRequested() {
-            popup.open();
-        }
-    }
+    // External download requests (e.g. from browser IPC) show progress on
+    // the top bar button without popping up the full window.
 
     component YtdIcon: Item {
         id: wrapper
@@ -329,7 +325,7 @@ Item {
         onClicked: popup.toggle()
         background: StyledRect {
             id: buttonBackground
-            variant: root.barActive ? "primary" : "bg"
+            variant: root.popupOpen ? "primary" : "bg"
             enableShadow: root.layerEnabled
             topLeftRadius: root.startRadius
             bottomLeftRadius: root.startRadius
@@ -341,77 +337,104 @@ Item {
                 color: Styling.srItem("overprimary")
                 opacity: button.down ? 0.5 : (button.hovered ? 0.25 : 0)
                 radius: parent.radius ?? 0
+
+                Behavior on opacity {
+                    enabled: Config.animDuration > 0
+                    NumberAnimation { duration: Config.animDuration / 2 }
+                }
             }
 
-            Canvas {
-                id: progressRing
-                anchors.fill: parent
-                anchors.margins: 1
+            // Circular progress indicator (matching kde-connect-helper style, slightly outward & complete circle)
+            Item {
+                id: progressCanvas
+                anchors.centerIn: parent
+                width: 36
+                height: 36
                 visible: YtdService.running
-                antialiasing: true
-                z: 2
 
-                onPaint: {
-                    const context = getContext("2d");
-                    context.reset();
-                    const thickness = 2;
-                    const radius = Math.max(0, Math.min(width, height) / 2 - thickness / 2);
-                    const centerX = width / 2;
-                    const centerY = height / 2;
-                    const startAngle = -Math.PI / 2;
-                    const fraction = Math.max(0, Math.min(1, YtdService.progress / 100));
+                property real targetProgress: YtdService.running ? YtdService.progress : 0
+                property real smoothProgress: 0
+                property real radius: 13.5
+                property real lineWidth: 2.5
 
-                    // Keep the track dark so it remains distinct from the
-                    // light primary button surface. The moving arc is light
-                    // and therefore reads as the actual progress indicator.
-                    context.lineWidth = thickness;
-                    context.lineCap = "round";
-                    context.strokeStyle = root.barTrackColor;
-                    context.beginPath();
-                    context.arc(centerX, centerY, radius, startAngle, startAngle + Math.PI * 2);
-                    context.stroke();
-
-                    if (fraction > 0) {
-                        context.strokeStyle = root.barProgressColor;
-                        context.beginPath();
-                        context.arc(centerX, centerY, radius, startAngle,
-                            startAngle + Math.PI * 2 * fraction);
-                        context.stroke();
+                Behavior on smoothProgress {
+                    enabled: Config.animDuration > 0 && YtdService.running
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutQuad
                     }
                 }
 
-                onWidthChanged: requestPaint()
-                onHeightChanged: requestPaint()
-                onVisibleChanged: requestPaint()
-
-                Connections {
-                    target: YtdService
-                    function onProgressChanged() { progressRing.requestPaint(); }
-                    function onRunningChanged() { progressRing.requestPaint(); }
+                onTargetProgressChanged: {
+                    if (!YtdService.running || targetProgress === 0) {
+                        smoothProgress = 0;
+                    } else if (targetProgress > smoothProgress) {
+                        smoothProgress = targetProgress;
+                    }
                 }
-                Connections {
-                    target: root
-                    function onBarContentColorChanged() { progressRing.requestPaint(); }
-                    function onBarProgressColorChanged() { progressRing.requestPaint(); }
+
+                Canvas {
+                    id: canvas
+                    anchors.fill: parent
+                    antialiasing: true
+
+                    onPaint: {
+                        let ctx = getContext("2d");
+                        ctx.reset();
+
+                        let centerX = width / 2;
+                        let centerY = height / 2;
+                        let radius = progressCanvas.radius;
+                        let lineWidth = progressCanvas.lineWidth;
+
+                        ctx.lineCap = "round";
+
+                        let startAngle = -Math.PI / 2;
+                        let fraction = Math.max(0, Math.min(1, progressCanvas.smoothProgress / 100));
+                        let progressAngleRad = fraction * Math.PI * 2;
+
+                        // Draw background track (complete circle, matching kde-connect-helper Colors.outlineVariant)
+                        ctx.strokeStyle = Colors.outlineVariant;
+                        ctx.lineWidth = lineWidth;
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, false);
+                        ctx.stroke();
+
+                        // Draw progress arc
+                        if (fraction > 0) {
+                            ctx.strokeStyle = root.popupOpen ? Colors.background : Colors.primary;
+                            ctx.lineWidth = lineWidth;
+                            ctx.beginPath();
+                            ctx.arc(centerX, centerY, radius, startAngle, startAngle + progressAngleRad, false);
+                            ctx.stroke();
+                        }
+                    }
+
+                    Connections {
+                        target: progressCanvas
+                        function onSmoothProgressChanged() { canvas.requestPaint(); }
+                    }
+
+                    Connections {
+                        target: YtdService
+                        function onRunningChanged() {
+                            if (!YtdService.running)
+                                progressCanvas.smoothProgress = 0;
+                            canvas.requestPaint();
+                        }
+                    }
+
+                    Connections {
+                        target: root
+                        function onPopupOpenChanged() { canvas.requestPaint(); }
+                    }
                 }
             }
         }
         contentItem: Item {
             YtdIcon {
                 anchors.fill: parent
-                visible: !YtdService.running
                 tintColor: root.barContentColor
-            }
-            Text {
-                anchors.centerIn: parent
-                visible: YtdService.running
-                text: Math.round(YtdService.progress) + "%"
-                color: root.barContentColor
-                font.family: Styling.defaultFont
-                font.pixelSize: Styling.fontSize(-2)
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
             }
         }
         Accessible.name: YtdI18n.t("downloader")
@@ -420,7 +443,7 @@ Item {
     StyledToolTip {
         show: button.hovered && !root.popupOpen
         tooltipText: YtdI18n.t("downloader")
-        desciription: YtdService.running ? Math.round(YtdService.progress) + "%" : YtdI18n.t("download_media")
+        desciription: YtdService.running ? root.statusText() : YtdI18n.t("download_media")
     }
 
     Process {
@@ -839,7 +862,16 @@ Item {
                                                     height: 5
                                                     radius: 3
                                                     color: Colors.surfaceVariant
-                                                    Rectangle { width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100; height: parent.height; radius: 3; color: Styling.srItem("overprimary") }
+                                                    Rectangle {
+                                                        width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
+                                                        height: parent.height
+                                                        radius: 3
+                                                        color: Styling.srItem("overprimary")
+                                                        Behavior on width {
+                                                            enabled: Config.animDuration > 0
+                                                            NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
+                                                        }
+                                                    }
                                                 }
 
                                                 RowLayout {

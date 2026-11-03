@@ -160,6 +160,7 @@ class FinishedTracker:
     def __init__(self):
         self.items = []
         self._indexes = {}
+        self._max_percent = 0.0
 
     @staticmethod
     def _key(payload):
@@ -187,8 +188,48 @@ class FinishedTracker:
             self._indexes[key] = len(self.items)
             self.items.append(item)
 
+    def calculate_percent(self, payload, data):
+        """Calculate monotonic composite progress across multi-stream downloads and playlists."""
+        info = data.get("info_dict") or {}
+        req_formats = info.get("requested_formats")
+        curr_format_id = str(info.get("format_id") or "")
+
+        raw_pct = float(payload.get("percent") or 0.0)
+
+        # Multi-stream scaling (video ~88%, audio ~10%, merge/postprocess ~2%)
+        if req_formats and len(req_formats) >= 2:
+            f0_id = str(req_formats[0].get("format_id") or "")
+            f1_id = str(req_formats[1].get("format_id") or "")
+            if curr_format_id == f0_id:
+                item_pct = raw_pct * 0.88
+            elif curr_format_id == f1_id:
+                item_pct = 88.0 + (raw_pct * 0.10)
+            else:
+                item_pct = raw_pct * 0.98
+        else:
+            item_pct = raw_pct * 0.98
+
+        index = int(payload.get("index") or 0)
+        count = int(payload.get("count") or 0)
+        if count > 1 and index > 0:
+            final_pct = ((index - 1) / count * 100.0) + (item_pct / count)
+        else:
+            final_pct = item_pct
+
+        if payload.get("event") == "finished":
+            if count <= 1:
+                if not req_formats or curr_format_id == str(req_formats[-1].get("format_id") or ""):
+                    final_pct = max(final_pct, 98.0)
+            else:
+                final_pct = max(final_pct, (index / count) * 100.0 * 0.98)
+
+        # Monotonically non-decreasing: progress only moves forward or holds
+        self._max_percent = max(self._max_percent, min(99.0, final_pct))
+        return round(self._max_percent, 1)
+
     def report(self, data):
         payload = progress_payload(data)
+        payload["percent"] = self.calculate_percent(payload, data)
         if payload["event"] == "finished":
             key = self._key(payload)
             if key and key in self._indexes:

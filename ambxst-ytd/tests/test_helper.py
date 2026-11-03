@@ -153,6 +153,52 @@ class EventTests(unittest.TestCase):
         self.assertEqual(self.tracker.items[0]["filename"], "/tmp/video.mp3")
         self.assertEqual(self.output.getvalue().count('"event": "finished"'), 1)
 
+    def test_tracker_monotonic_progress_across_multi_streams(self):
+        tracker = helper.FinishedTracker()
+        req_formats = [{"format_id": "137"}, {"format_id": "140"}]
+
+        # Video stream 50%
+        p1 = tracker.calculate_percent(
+            {"percent": 50, "event": "downloading"},
+            {"info_dict": {"format_id": "137", "requested_formats": req_formats}},
+        )
+        self.assertEqual(p1, 44.0)
+
+        # Video stream 100%
+        p2 = tracker.calculate_percent(
+            {"percent": 100, "event": "downloading"},
+            {"info_dict": {"format_id": "137", "requested_formats": req_formats}},
+        )
+        self.assertEqual(p2, 88.0)
+
+        # Audio stream starts at 0% - must NOT decrease back to 0!
+        p3 = tracker.calculate_percent(
+            {"percent": 0, "event": "downloading"},
+            {"info_dict": {"format_id": "140", "requested_formats": req_formats}},
+        )
+        self.assertGreaterEqual(p3, p2)
+
+        # Audio stream at 50%
+        p4 = tracker.calculate_percent(
+            {"percent": 50, "event": "downloading"},
+            {"info_dict": {"format_id": "140", "requested_formats": req_formats}},
+        )
+        self.assertEqual(p4, 93.0)
+
+        # Audio finished
+        p5 = tracker.calculate_percent(
+            {"percent": 100, "event": "finished"},
+            {"info_dict": {"format_id": "140", "requested_formats": req_formats}},
+        )
+        self.assertEqual(p5, 98.0)
+
+    def test_tracker_never_decreases_on_jitter(self):
+        tracker = helper.FinishedTracker()
+        p1 = tracker.calculate_percent({"percent": 52.5, "event": "downloading"}, {})
+        p2 = tracker.calculate_percent({"percent": 51.0, "event": "downloading"}, {})
+        self.assertGreaterEqual(p2, p1)
+        self.assertEqual(p2, p1)
+
     def test_complete_payload_contains_final_items(self):
         complete = helper.complete_payload(
             {"title": "Playlist"},
