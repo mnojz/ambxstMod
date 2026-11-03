@@ -47,6 +47,10 @@ Item {
     readonly property color barTrackColor: Colors.background
     readonly property color barProgressColor: Colors.overBackground
 
+    // Unified neutral background colors for cards and input elements
+    readonly property color cardBgColor: Qt.rgba(1, 1, 1, 0.09)
+    readonly property color cardBgHoverColor: Qt.rgba(1, 1, 1, 0.14)
+
     // Display labels for the values in YtdService.formats.
     readonly property var formatOptions: [
         { label: "MP3", value: "mp3" },
@@ -223,7 +227,7 @@ Item {
 
         implicitHeight: 36
         radius: Styling.radius(-3)
-        color: Qt.rgba(1, 1, 1, 0.04)
+        color: root.cardBgColor
 
         RowLayout {
             anchors.fill: parent
@@ -687,8 +691,8 @@ Item {
                             color: root.urlRejected
                                 ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
                                 : (inputHover.hovered || urlField.activeFocus
-                                    ? Qt.rgba(1, 1, 1, 0.07)
-                                    : Qt.rgba(1, 1, 1, 0.04))
+                                    ? root.cardBgHoverColor
+                                    : root.cardBgColor)
 
                             Behavior on color {
                                 enabled: Config.animDuration > 0
@@ -903,8 +907,8 @@ Item {
                                             ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.32)
                                             : Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22))
                                         : (downloadButton.hovered
-                                            ? Qt.rgba(1, 1, 1, 0.08)
-                                            : Qt.rgba(1, 1, 1, 0.04))
+                                            ? root.cardBgHoverColor
+                                            : root.cardBgColor)
 
                                     Behavior on color {
                                         enabled: Config.animDuration > 0
@@ -946,7 +950,7 @@ Item {
                                 Layout.fillWidth: true
                                 implicitHeight: detailsColumn.implicitHeight + 16
                                 radius: Styling.radius(-3)
-                                color: Qt.rgba(1, 1, 1, 0.04)
+                                color: root.cardBgColor
 
                                 ColumnLayout {
                                     id: detailsColumn
@@ -1155,7 +1159,7 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 56
                                     radius: Styling.radius(-3)
-                                    color: historyCardHover.hovered ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(1, 1, 1, 0.04)
+                                    color: historyCardHover.hovered ? root.cardBgHoverColor : root.cardBgColor
 
                                     Behavior on color {
                                         enabled: Config.animDuration > 0
