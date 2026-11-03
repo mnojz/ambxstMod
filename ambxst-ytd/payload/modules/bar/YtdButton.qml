@@ -53,7 +53,7 @@ Item {
         { label: "480p", value: "480p" },
         { label: "720p", value: "720p" },
         { label: "1080p", value: "1080p" },
-        { label: "1440p", value: "1440p" },
+        { label: "2K", value: "1440p" },
         { label: "4K", value: "2160p" }
     ]
 
@@ -75,16 +75,6 @@ Item {
                 return i;
         }
         return formatIndex(YtdService.defaultFormat);
-    }
-
-    function formatColor(value) {
-        if (value === "mp3") return Colors.magenta;
-        if (value === "480p") return Colors.green;
-        if (value === "720p") return Colors.cyan;
-        if (value === "1080p") return Colors.primary;
-        if (value === "1440p") return Colors.tertiary;
-        if (value === "2160p") return Colors.yellow;
-        return Colors.primary;
     }
 
     function startDownload() {
@@ -223,7 +213,7 @@ Item {
     }
 
     // Segmented quality/format selector with neutral semi-transparent track,
-    // smooth sliding translucent colored pill, and distinct hover tints.
+    // equal active and hover thumb sizing, and distinct text color hierarchy.
     component FormatSelector: Rectangle {
         id: selector
         property var options: []
@@ -233,103 +223,68 @@ Item {
 
         implicitHeight: 36
         radius: Styling.radius(-3)
-        color: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04)
+        color: Qt.rgba(1, 1, 1, 0.04)
 
-        readonly property var currentOption: (options && currentIndex >= 0 && currentIndex < options.length) ? options[currentIndex] : null
-        readonly property color activeColor: currentOption ? root.formatColor(currentOption.value) : Colors.primary
-
-        Item {
+        RowLayout {
             anchors.fill: parent
             anchors.margins: selector.padding
+            spacing: 3
 
-            Rectangle {
-                id: highlight
-                property Item activeItem: optionRepeater.itemAt(selector.currentIndex)
-                x: activeItem ? activeItem.x : 0
-                width: activeItem ? activeItem.width : 48
-                height: parent.height
-                radius: Styling.radius(-4)
-                color: Qt.rgba(selector.activeColor.r, selector.activeColor.g, selector.activeColor.b, 0.22)
+            Repeater {
+                id: optionRepeater
+                model: selector.options
 
-                Behavior on x {
-                    enabled: Config.animDuration > 0
-                    NumberAnimation {
-                        duration: Config.animDuration / 2
-                        easing.type: Easing.OutCubic
-                    }
-                }
-                Behavior on width {
-                    enabled: Config.animDuration > 0
-                    NumberAnimation {
-                        duration: Config.animDuration / 2
-                        easing.type: Easing.OutCubic
-                    }
-                }
-                Behavior on color {
-                    enabled: Config.animDuration > 0
-                    ColorAnimation {
-                        duration: Config.animDuration / 2
-                    }
-                }
-            }
+                delegate: Button {
+                    id: optionButton
+                    required property var modelData
+                    required property int index
 
-            RowLayout {
-                id: optionsRow
-                anchors.fill: parent
-                spacing: 2
+                    readonly property bool isSelected: selector.currentIndex === optionButton.index
 
-                Repeater {
-                    id: optionRepeater
-                    model: selector.options
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.fillHeight: true
+                    focusPolicy: Qt.NoFocus
+                    hoverEnabled: true
+                    flat: true
 
-                    delegate: Button {
-                        id: optionButton
-                        required property var modelData
-                        required property int index
-
-                        readonly property bool isSelected: selector.currentIndex === optionButton.index
-                        readonly property color itemColor: root.formatColor(optionButton.modelData.value)
-
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.fillHeight: true
-                        focusPolicy: Qt.NoFocus
-                        hoverEnabled: true
-                        flat: true
-                        background: Rectangle {
-                            radius: Styling.radius(-4)
-                            color: (!optionButton.isSelected && optionButton.hovered)
-                                ? Qt.rgba(optionButton.itemColor.r, optionButton.itemColor.g, optionButton.itemColor.b, 0.12)
-                                : "transparent"
-                            Behavior on color {
-                                enabled: Config.animDuration > 0
-                                ColorAnimation { duration: 120 }
-                            }
+                    background: Rectangle {
+                        anchors.fill: parent
+                        radius: Styling.radius(-4)
+                        color: optionButton.isSelected
+                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
+                            : (optionButton.hovered
+                                ? Qt.rgba(Colors.cyan.r, Colors.cyan.g, Colors.cyan.b, 0.12)
+                                : "transparent")
+                        Behavior on color {
+                            enabled: Config.animDuration > 0
+                            ColorAnimation { duration: 150 }
                         }
-
-                        contentItem: Item {
-                            Text {
-                                anchors.centerIn: parent
-                                width: parent.width
-                                text: optionButton.modelData.label
-                                color: optionButton.isSelected
-                                    ? optionButton.itemColor
-                                    : (optionButton.hovered ? optionButton.itemColor : Colors.overBackground)
-                                opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 0.95 : 0.65)
-                                font.family: Styling.defaultFont
-                                font.pixelSize: 12
-                                font.bold: optionButton.isSelected
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-
-                        onClicked: {
-                            selector.currentIndex = optionButton.index;
-                            selector.selected(optionButton.index);
-                        }
-                        Accessible.name: optionButton.modelData.label
                     }
+
+                    contentItem: Item {
+                        anchors.fill: parent
+                        Text {
+                            anchors.centerIn: parent
+                            width: parent.width
+                            text: optionButton.modelData.label
+                            color: optionButton.isSelected
+                                ? Colors.primary
+                                : (optionButton.hovered ? Colors.cyan : Colors.overBackground)
+                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 1.0 : 0.65)
+                            font.family: Styling.defaultFont
+                            font.pixelSize: 13
+                            font.bold: optionButton.isSelected
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    onClicked: {
+                        selector.currentIndex = optionButton.index;
+                        selector.selected(optionButton.index);
+                    }
+                    Accessible.name: optionButton.modelData.label
                 }
             }
         }
@@ -674,12 +629,12 @@ Item {
                                 background: Rectangle {
                                     radius: Styling.radius(-4)
                                     color: headerMusicFolderBtn.hovered
-                                        ? Qt.rgba(Colors.magenta.r, Colors.magenta.g, Colors.magenta.b, 0.15)
+                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
                                         : "transparent"
                                 }
                                 contentItem: Text {
-                                    text: Icons.note
-                                    color: headerMusicFolderBtn.hovered ? Colors.magenta : Colors.overBackground
+                                    text: "\ue340"
+                                    color: headerMusicFolderBtn.hovered ? Colors.primary : Colors.overBackground
                                     opacity: headerMusicFolderBtn.hovered ? 1.0 : 0.8
                                     font.family: Icons.font
                                     font.pixelSize: 18
@@ -731,11 +686,9 @@ Item {
                             radius: Styling.radius(-3)
                             color: root.urlRejected
                                 ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
-                                : (urlField.activeFocus
-                                    ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
-                                    : (inputHover.hovered
-                                        ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
-                                        : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04)))
+                                : (inputHover.hovered || urlField.activeFocus
+                                    ? Qt.rgba(1, 1, 1, 0.07)
+                                    : Qt.rgba(1, 1, 1, 0.04))
 
                             Behavior on color {
                                 enabled: Config.animDuration > 0
@@ -772,7 +725,7 @@ Item {
                                     focus: popup.isOpen
                                     background: Item {}
                                     color: Colors.overBackground
-                                    placeholderTextColor: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.45)
+                                    placeholderTextColor: Qt.rgba(1, 1, 1, 0.40)
                                     font.family: Styling.defaultFont
                                     font.pixelSize: Styling.fontSize(0)
                                     leftPadding: 0
@@ -780,6 +733,44 @@ Item {
                                     verticalAlignment: Text.AlignVCenter
                                     onAccepted: root.startDownload()
                                     Keys.onEscapePressed: popup.close()
+                                }
+
+                                // Icon-only Playlist Scope Toggle: shown only when link contains playlist parameter
+                                Button {
+                                    id: inlinePlaylistBtn
+                                    visible: root.hasPlaylistParam
+                                    Layout.preferredWidth: 26
+                                    Layout.preferredHeight: 26
+                                    focusPolicy: Qt.NoFocus
+                                    onClicked: YtdService.playlistScope = !YtdService.playlistScope
+                                    background: Rectangle {
+                                        radius: 13
+                                        color: YtdService.playlistScope
+                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
+                                            : (inlinePlaylistBtn.hovered
+                                                ? Qt.rgba(1, 1, 1, 0.10)
+                                                : "transparent")
+                                    }
+                                    contentItem: Text {
+                                        text: YtdService.playlistScope ? Icons.list : Icons.play
+                                        color: YtdService.playlistScope
+                                            ? Colors.primary
+                                            : (inlinePlaylistBtn.hovered ? Colors.primary : Colors.overBackground)
+                                        opacity: YtdService.playlistScope ? 1.0 : (inlinePlaylistBtn.hovered ? 1.0 : 0.75)
+                                        font.family: Icons.font
+                                        font.pixelSize: 15
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    Accessible.name: YtdService.playlistScope
+                                        ? YtdI18n.t("scope_playlist")
+                                        : YtdI18n.t("scope_single")
+                                    StyledToolTip {
+                                        show: inlinePlaylistBtn.hovered
+                                        tooltipText: YtdService.playlistScope
+                                            ? YtdI18n.t("scope_playlist")
+                                            : YtdI18n.t("scope_single")
+                                    }
                                 }
 
                                 Button {
@@ -795,7 +786,7 @@ Item {
                                         radius: Styling.radius(-5)
                                         color: inlinePasteBtn.hovered
                                             ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
-                                            : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
+                                            : Qt.rgba(1, 1, 1, 0.08)
                                     }
                                     contentItem: RowLayout {
                                         spacing: 4
@@ -875,7 +866,7 @@ Item {
                             }
                         }
 
-                        // Row 3: Quality Segmented Selector + Contextual Playlist Toggle + Icon-Only Download Button
+                        // Row 3: Quality Segmented Selector + Icon-Only Download Button
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 6
@@ -897,64 +888,6 @@ Item {
                                 }
                             }
 
-                            // Contextual Playlist Scope Toggle: ONLY visible when URL contains a playlist parameter!
-                            Button {
-                                id: playlistToggle
-                                readonly property bool playlistOn: YtdService.playlistScope
-                                visible: root.hasPlaylistParam
-
-                                Layout.preferredWidth: 84
-                                Layout.preferredHeight: 36
-                                focusPolicy: Qt.NoFocus
-                                onClicked: YtdService.playlistScope = !YtdService.playlistScope
-
-                                background: Rectangle {
-                                    radius: Styling.radius(-3)
-                                    color: playlistToggle.playlistOn
-                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
-                                        : (playlistToggle.hovered
-                                            ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
-                                            : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04))
-                                    Behavior on color {
-                                        enabled: Config.animDuration > 0
-                                        ColorAnimation { duration: 150 }
-                                    }
-                                }
-                                contentItem: RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 5
-                                    Text {
-                                        text: playlistToggle.playlistOn ? Icons.list : Icons.play
-                                        color: playlistToggle.playlistOn
-                                            ? Colors.primary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
-                                        opacity: playlistToggle.playlistOn ? 1.0 : (playlistToggle.hovered ? 1.0 : 0.8)
-                                        font.family: Icons.font
-                                        font.pixelSize: 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                    Text {
-                                        text: playlistToggle.playlistOn ? "Playlist" : "Single"
-                                        color: playlistToggle.playlistOn
-                                            ? Colors.primary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
-                                        opacity: playlistToggle.playlistOn ? 1.0 : (playlistToggle.hovered ? 1.0 : 0.85)
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                }
-                                Accessible.name: YtdI18n.t(
-                                    playlistToggle.playlistOn ? "scope_playlist" : "scope_single")
-                                StyledToolTip {
-                                    show: playlistToggle.hovered
-                                    tooltipText: YtdService.playlistScope
-                                        ? YtdI18n.t("scope_playlist")
-                                        : YtdI18n.t("scope_single")
-                                }
-                            }
-
                             // Icon-Only Download Action Button
                             Button {
                                 id: downloadButton
@@ -970,8 +903,8 @@ Item {
                                             ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.32)
                                             : Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22))
                                         : (downloadButton.hovered
-                                            ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
-                                            : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04))
+                                            ? Qt.rgba(1, 1, 1, 0.08)
+                                            : Qt.rgba(1, 1, 1, 0.04))
 
                                     Behavior on color {
                                         enabled: Config.animDuration > 0
