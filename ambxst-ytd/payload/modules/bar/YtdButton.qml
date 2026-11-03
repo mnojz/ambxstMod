@@ -54,7 +54,7 @@ Item {
         { label: "720p", value: "720p" },
         { label: "1080p", value: "1080p" },
         { label: "1440p", value: "1440p" },
-        { label: "2160p", value: "2160p" }
+        { label: "4K", value: "2160p" }
     ]
 
     // Only a real YouTube/YouTube Music link can be downloaded, so the field
@@ -222,9 +222,11 @@ Item {
         property int padding: 2
         signal selected(int index)
 
-        implicitHeight: 34
-        radius: Styling.radius(-4)
+        implicitHeight: 36
+        radius: Styling.radius(-3)
         variant: "common"
+        border.width: 1
+        border.color: Colors.surfaceBright
 
         Item {
             anchors.fill: parent
@@ -236,7 +238,7 @@ Item {
                 x: activeItem ? activeItem.x : 0
                 width: activeItem ? activeItem.width : 48
                 height: parent.height
-                radius: Styling.radius(-6)
+                radius: Styling.radius(-5)
                 variant: "primary"
 
                 Behavior on x {
@@ -275,7 +277,11 @@ Item {
                         focusPolicy: Qt.NoFocus
                         hoverEnabled: true
                         flat: true
-                        background: Rectangle { color: "transparent" }
+                        background: Rectangle {
+                            color: optionButton.hovered && selector.currentIndex !== optionButton.index ? Colors.surfaceBright : "transparent"
+                            opacity: 0.35
+                            radius: Styling.radius(-5)
+                        }
 
                         contentItem: Item {
                             Text {
@@ -283,9 +289,10 @@ Item {
                                 width: parent.width
                                 text: optionButton.modelData.label
                                 color: selector.currentIndex === optionButton.index
-                                    ? Colors.background : Colors.overBackground
+                                    ? Colors.overPrimary : Colors.overBackground
+                                opacity: selector.currentIndex === optionButton.index ? 1.0 : (optionButton.hovered ? 1.0 : 0.75)
                                 font.family: Styling.defaultFont
-                                font.pixelSize: 12
+                                font.pixelSize: 13
                                 font.bold: selector.currentIndex === optionButton.index
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
@@ -624,7 +631,8 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     text: root.statusText()
-                                    color: Colors.outline
+                                    color: Colors.overBackground
+                                    opacity: 0.72
                                     font.family: Styling.defaultFont
                                     font.pixelSize: Styling.fontSize(-1)
                                     elide: Text.ElideRight
@@ -685,50 +693,35 @@ Item {
                             }
                         }
 
+                        // Row 2: Searchbar / URL Input & Hero Download Action
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 6
+                            spacing: 8
 
                             StyledRect {
                                 id: inputContainer
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 38
-                                variant: root.urlRejected ? "common" : (urlField.activeFocus ? "focus" : "internalbg")
-                                radius: Styling.radius(-4)
+                                Layout.preferredHeight: 42
+                                variant: "common"
+                                radius: Styling.radius(-3)
                                 enableShadow: false
-                                border.width: urlField.activeFocus ? 2 : (root.urlRejected ? 1 : 0)
-                                border.color: root.urlRejected ? Colors.red : Styling.srItem("primary")
+                                border.width: urlField.activeFocus ? 2 : (root.urlRejected ? 1.5 : 1)
+                                border.color: root.urlRejected ? Colors.red : (urlField.activeFocus ? Colors.primary : Colors.surfaceBright)
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 4
-                                    anchors.rightMargin: 6
-                                    spacing: 4
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 8
+                                    spacing: 8
 
-                                    Button {
-                                        id: inlinePasteBtn
-                                        Layout.preferredWidth: 28
-                                        Layout.preferredHeight: 28
-                                        focusPolicy: Qt.NoFocus
-                                        enabled: !YtdService.clipboardBusy
-                                        onClicked: YtdService.readClipboard()
-                                        background: Rectangle {
-                                            color: inlinePasteBtn.hovered ? Colors.surfaceVariant : "transparent"
-                                            radius: Styling.radius(-5)
-                                        }
-                                        contentItem: Text {
-                                            text: Icons.clipboard
-                                            color: inlinePasteBtn.enabled ? (inlinePasteBtn.hovered ? Colors.primary : Colors.outline) : Colors.outline
-                                            font.family: Icons.font
-                                            font.pixelSize: 17
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        Accessible.name: YtdI18n.t("paste_from_clipboard")
-                                        StyledToolTip {
-                                            show: inlinePasteBtn.hovered
-                                            tooltipText: YtdI18n.t("paste_from_clipboard")
-                                        }
+                                    // Leading Icon (Link)
+                                    Text {
+                                        text: Icons.link
+                                        font.family: Icons.font
+                                        font.pixelSize: 18
+                                        color: urlField.activeFocus ? Colors.primary : Colors.overBackground
+                                        opacity: urlField.activeFocus ? 1.0 : 0.6
+                                        verticalAlignment: Text.AlignVCenter
                                     }
 
                                     TextField {
@@ -742,31 +735,77 @@ Item {
                                         focus: popup.isOpen
                                         background: Item {}
                                         color: Colors.overBackground
+                                        placeholderTextColor: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.45)
                                         font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-1)
-                                        leftPadding: 2
-                                        rightPadding: 2
+                                        font.pixelSize: Styling.fontSize(0)
+                                        leftPadding: 0
+                                        rightPadding: 0
                                         verticalAlignment: Text.AlignVCenter
                                         onAccepted: root.startDownload()
                                         Keys.onEscapePressed: popup.close()
                                     }
 
+                                    // Contextual Trailing Button: "Paste" chip when empty, "✕" clear when filled
+                                    Button {
+                                        id: inlinePasteBtn
+                                        visible: urlField.text.length === 0
+                                        Layout.preferredHeight: 28
+                                        leftPadding: 8
+                                        rightPadding: 8
+                                        focusPolicy: Qt.NoFocus
+                                        enabled: !YtdService.clipboardBusy
+                                        onClicked: YtdService.readClipboard()
+                                        background: StyledRect {
+                                            variant: inlinePasteBtn.hovered ? "focus" : "common"
+                                            radius: Styling.radius(-5)
+                                            enableShadow: false
+                                            border.width: 1
+                                            border.color: Colors.surfaceBright
+                                        }
+                                        contentItem: RowLayout {
+                                            spacing: 4
+                                            Text {
+                                                text: Icons.clipboard
+                                                font.family: Icons.font
+                                                font.pixelSize: 14
+                                                color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
+                                                opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            Text {
+                                                text: "Paste"
+                                                font.family: Styling.defaultFont
+                                                font.pixelSize: Styling.fontSize(-2)
+                                                font.bold: true
+                                                color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
+                                                opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                        }
+                                        Accessible.name: YtdI18n.t("paste_from_clipboard")
+                                        StyledToolTip {
+                                            show: inlinePasteBtn.hovered
+                                            tooltipText: YtdI18n.t("paste_from_clipboard")
+                                        }
+                                    }
+
                                     Button {
                                         id: inlineClearBtn
-                                        Layout.preferredWidth: 24
-                                        Layout.preferredHeight: 24
                                         visible: urlField.text.length > 0
+                                        Layout.preferredWidth: 26
+                                        Layout.preferredHeight: 26
                                         focusPolicy: Qt.NoFocus
                                         onClicked: urlField.clear()
                                         background: Rectangle {
-                                            color: inlineClearBtn.hovered ? Colors.surfaceVariant : "transparent"
-                                            radius: Styling.radius(-5)
+                                            color: inlineClearBtn.hovered ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.2) : "transparent"
+                                            radius: 13
                                         }
                                         contentItem: Text {
                                             text: Icons.cancel
-                                            color: inlineClearBtn.hovered ? Colors.red : Colors.outline
+                                            color: inlineClearBtn.hovered ? Colors.red : Colors.overBackground
+                                            opacity: inlineClearBtn.hovered ? 1.0 : 0.7
                                             font.family: Icons.font
-                                            font.pixelSize: 15
+                                            font.pixelSize: 16
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                         }
@@ -779,52 +818,79 @@ Item {
                                 }
                             }
 
+                            // Prominent Download Action Button with Label & Fat Download Glyph
                             Button {
                                 id: downloadButton
-                                Layout.preferredWidth: 42
-                                Layout.preferredHeight: 38
+                                Layout.preferredWidth: 108
+                                Layout.preferredHeight: 42
                                 focusPolicy: Qt.NoFocus
                                 enabled: root.urlFilled && root.urlValid && !YtdService.running
                                 onClicked: root.startDownload()
                                 background: StyledRect {
                                     variant: downloadButton.enabled ? "primary" : "common"
-                                    radius: Styling.radius(-4)
+                                    radius: Styling.radius(-3)
                                     enableShadow: false
+                                    border.width: downloadButton.enabled ? 0 : 1
+                                    border.color: Colors.surfaceBright
+                                    opacity: downloadButton.enabled ? 1.0 : 0.65
                                 }
-                                contentItem: Text {
-                                    text: Icons.arrowDown
-                                    color: downloadButton.enabled ? Colors.background : Colors.outline
-                                    font.family: Icons.font
-                                    font.pixelSize: 22
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
+                                contentItem: RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Text {
+                                        text: Icons.arrowFatLinesDown
+                                        color: downloadButton.enabled ? Colors.overPrimary : Colors.overBackground
+                                        opacity: downloadButton.enabled ? 1.0 : 0.5
+                                        font.family: Icons.font
+                                        font.pixelSize: 18
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    Text {
+                                        text: YtdI18n.t("download")
+                                        color: downloadButton.enabled ? Colors.overPrimary : Colors.overBackground
+                                        opacity: downloadButton.enabled ? 1.0 : 0.5
+                                        font.family: Styling.defaultFont
+                                        font.pixelSize: Styling.fontSize(-1)
+                                        font.bold: true
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
                                 Accessible.name: YtdI18n.t("download")
                                 StyledToolTip {
                                     show: downloadButton.hovered
-                                    tooltipText: YtdI18n.t("download")
+                                    tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
                                 }
                             }
                         }
 
+                        // Rejection / Error Hint Row
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 6
                             visible: root.urlRejected
                             Text {
+                                text: Icons.alert
+                                font.family: Icons.font
+                                font.pixelSize: 15
+                                color: Colors.red
+                            }
+                            Text {
                                 Layout.fillWidth: true
                                 text: root.urlMessage
                                 color: Colors.red
                                 font.family: Styling.defaultFont
-                                font.pixelSize: Styling.fontSize(-2)
+                                font.pixelSize: Styling.fontSize(-1)
                                 font.bold: true
                                 elide: Text.ElideRight
                             }
                         }
 
+                        // Row 3: Quality Segmented Selector + Scope Toggle Pill
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 6
+                            spacing: 8
 
                             FormatSelector {
                                 id: formatSwitch
@@ -847,8 +913,8 @@ Item {
                                 id: playlistToggle
                                 readonly property bool playlistOn: YtdService.playlistScope
 
-                                Layout.preferredWidth: 38
-                                Layout.preferredHeight: 34
+                                Layout.preferredWidth: 84
+                                Layout.preferredHeight: 36
                                 focusPolicy: Qt.NoFocus
                                 onClicked: YtdService.playlistScope = !YtdService.playlistScope
 
@@ -856,17 +922,35 @@ Item {
                                     variant: playlistToggle.playlistOn
                                         ? "primary"
                                         : (playlistToggle.hovered ? "focus" : "common")
-                                    radius: Styling.radius(-4)
+                                    radius: Styling.radius(-3)
                                     enableShadow: false
+                                    border.width: playlistToggle.playlistOn ? 0 : 1
+                                    border.color: Colors.surfaceBright
                                 }
-                                contentItem: Text {
-                                    text: Icons.list
-                                    color: playlistToggle.playlistOn
-                                        ? Colors.background : Colors.overBackground
-                                    font.family: Icons.font
-                                    font.pixelSize: 18
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
+                                contentItem: RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 5
+                                    Text {
+                                        text: playlistToggle.playlistOn ? Icons.list : Icons.play
+                                        color: playlistToggle.playlistOn
+                                            ? Colors.overPrimary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
+                                        opacity: playlistToggle.playlistOn ? 1.0 : (playlistToggle.hovered ? 1.0 : 0.8)
+                                        font.family: Icons.font
+                                        font.pixelSize: 15
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    Text {
+                                        text: playlistToggle.playlistOn ? "Playlist" : "Single"
+                                        color: playlistToggle.playlistOn
+                                            ? Colors.overPrimary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
+                                        opacity: playlistToggle.playlistOn ? 1.0 : (playlistToggle.hovered ? 1.0 : 0.85)
+                                        font.family: Styling.defaultFont
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
                                 Accessible.name: YtdI18n.t(
                                     playlistToggle.playlistOn ? "scope_playlist" : "scope_single")
@@ -899,16 +983,18 @@ Item {
                                 variant: "common"
                                 radius: Styling.radius(-2)
                                 enableShadow: false
+                                border.width: 1
+                                border.color: Colors.surfaceBright
 
                                 ColumnLayout {
                                     id: detailsColumn
                                     anchors.fill: parent
-                                    anchors.margins: 8
-                                    spacing: 6
+                                    anchors.margins: 10
+                                    spacing: 8
 
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        spacing: 8
+                                        spacing: 10
 
                                         ClippingRectangle {
                                             Layout.preferredWidth: 56
@@ -917,9 +1003,9 @@ Item {
                                             color: Colors.surfaceVariant
                                             YtdIcon {
                                                 anchors.centerIn: parent
-                                                width: 22
-                                                height: 22
-                                                iconSize: 22
+                                                width: 24
+                                                height: 24
+                                                iconSize: 24
                                                 visible: thumbnailImage.status !== Image.Ready || YtdService.thumbnail === ""
                                             }
                                             Image {
@@ -941,7 +1027,7 @@ Item {
                                                 text: YtdService.title !== "" ? YtdService.title : root.statusText()
                                                 color: Colors.overBackground
                                                 font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(-1)
+                                                font.pixelSize: Styling.fontSize(0)
                                                 font.bold: true
                                                 elide: Text.ElideMiddle
                                             }
@@ -950,9 +1036,10 @@ Item {
                                                 Layout.fillWidth: true
                                                 visible: YtdService.filename !== ""
                                                 text: YtdService.filename
-                                                color: Colors.outline
+                                                color: Colors.overBackground
+                                                opacity: 0.72
                                                 font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(-2)
+                                                font.pixelSize: Styling.fontSize(-1)
                                                 elide: Text.ElideMiddle
                                             }
 
@@ -963,13 +1050,13 @@ Item {
 
                                                 Rectangle {
                                                     Layout.fillWidth: true
-                                                    height: 4
-                                                    radius: 2
-                                                    color: Colors.surfaceVariant
+                                                    height: 6
+                                                    radius: 3
+                                                    color: Colors.surfaceBright
                                                     Rectangle {
                                                         width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
                                                         height: parent.height
-                                                        radius: 2
+                                                        radius: 3
                                                         color: Colors.primary
                                                         Behavior on width {
                                                             enabled: Config.animDuration > 0
@@ -986,16 +1073,17 @@ Item {
                                                         text: (YtdService.itemCount > 0 ? YtdService.completedCount + "/" + YtdService.itemCount + " · " : "") + Math.round(YtdService.progress) + "%"
                                                         color: Colors.primary
                                                         font.family: Styling.defaultFont
-                                                        font.pixelSize: Styling.fontSize(-2)
+                                                        font.pixelSize: 13
                                                         font.bold: true
                                                     }
 
                                                     Text {
                                                         Layout.fillWidth: true
                                                         text: YtdService.formatBytes(YtdService.downloaded) + (YtdService.total > 0 ? " / " + YtdService.formatBytes(YtdService.total) : "")
-                                                        color: Colors.outline
+                                                        color: Colors.overBackground
+                                                        opacity: 0.8
                                                         font.family: Styling.defaultFont
-                                                        font.pixelSize: Styling.fontSize(-2)
+                                                        font.pixelSize: 12
                                                         horizontalAlignment: Text.AlignRight
                                                         elide: Text.ElideRight
                                                     }
@@ -1003,9 +1091,10 @@ Item {
                                                     Text {
                                                         visible: YtdService.speed > 0
                                                         text: YtdService.formatSpeed(YtdService.speed)
-                                                        color: Colors.outline
+                                                        color: Colors.overBackground
+                                                        opacity: 0.8
                                                         font.family: Styling.defaultFont
-                                                        font.pixelSize: Styling.fontSize(-2)
+                                                        font.pixelSize: 12
                                                     }
 
                                                     Button {
@@ -1030,9 +1119,10 @@ Item {
                                                 Layout.fillWidth: true
                                                 visible: YtdService.message !== "" && (YtdService.state === "error" || YtdService.state === "cancelled")
                                                 text: YtdService.message
-                                                color: YtdService.state === "error" ? Colors.red : Colors.outline
+                                                color: YtdService.state === "error" ? Colors.red : Colors.overBackground
+                                                opacity: YtdService.state === "error" ? 1.0 : 0.75
                                                 font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(-2)
+                                                font.pixelSize: Styling.fontSize(-1)
                                                 elide: Text.ElideRight
                                             }
                                         }
@@ -1045,9 +1135,17 @@ Item {
                             Layout.fillWidth: true
                             spacing: 8
                             visible: root.historyVisible
-                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.3 }
-                            Text { text: YtdI18n.t("downloads"); color: Colors.outline; font.family: Styling.defaultFont; font.pixelSize: Styling.fontSize(-2); font.bold: true }
-                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.3 }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.4 }
+                            Text {
+                                text: YtdI18n.t("downloads").toUpperCase()
+                                color: Colors.overBackground
+                                opacity: 0.55
+                                font.family: Styling.defaultFont
+                                font.pixelSize: 11
+                                font.bold: true
+                                font.letterSpacing: 0.5
+                            }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.4 }
                         }
 
                         ColumnLayout {
@@ -1061,14 +1159,17 @@ Item {
                                 delegate: StyledRect {
                                     required property var modelData
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 52
+                                    Layout.preferredHeight: 56
                                     variant: "common"
                                     radius: Styling.radius(-2)
                                     enableShadow: false
+                                    border.width: 1
+                                    border.color: Colors.surfaceBright
+
                                     RowLayout {
                                         anchors.fill: parent
-                                        anchors.margins: 6
-                                        spacing: 8
+                                        anchors.margins: 8
+                                        spacing: 10
                                         ClippingRectangle {
                                             Layout.preferredWidth: 40
                                             Layout.preferredHeight: 40
@@ -1092,9 +1193,44 @@ Item {
                                         }
                                         ColumnLayout {
                                             Layout.fillWidth: true
-                                            spacing: 1
-                                            Text { Layout.fillWidth: true; text: modelData.title; color: Colors.overBackground; font.family: Styling.defaultFont; font.pixelSize: Styling.fontSize(-1); font.bold: true; elide: Text.ElideRight }
-                                            Text { Layout.fillWidth: true; text: modelData.format; color: Colors.outline; font.family: Styling.defaultFont; font.pixelSize: Styling.fontSize(-2); elide: Text.ElideRight }
+                                            spacing: 3
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.title
+                                                color: Colors.overBackground
+                                                font.family: Styling.defaultFont
+                                                font.pixelSize: Styling.fontSize(-1)
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                            }
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 6
+                                                Rectangle {
+                                                    Layout.preferredHeight: 18
+                                                    Layout.preferredWidth: formatBadgeText.implicitWidth + 8
+                                                    radius: Styling.radius(-5)
+                                                    color: Colors.surfaceBright
+                                                    Text {
+                                                        id: formatBadgeText
+                                                        anchors.centerIn: parent
+                                                        text: modelData.format
+                                                        color: Colors.overBackground
+                                                        font.family: Styling.defaultFont
+                                                        font.pixelSize: 10
+                                                        font.bold: true
+                                                    }
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.filename !== "" ? modelData.filename : modelData.url
+                                                    color: Colors.overBackground
+                                                    opacity: 0.65
+                                                    font.family: Styling.defaultFont
+                                                    font.pixelSize: 11
+                                                    elide: Text.ElideMiddle
+                                                }
+                                            }
                                         }
                                         RowLayout {
                                             Layout.preferredWidth: 54
@@ -1107,7 +1243,17 @@ Item {
                                                 enabled: modelData.filename !== ""
                                                 onClicked: root.openHistoryFolder(modelData.filename)
                                                 background: StyledRect { variant: openHistoryFolderButton.hovered ? "focus" : "common"; radius: Styling.radius(-5); enableShadow: false }
-                                                contentItem: Text { text: Icons.folder; color: openHistoryFolderButton.enabled ? Colors.overBackground : Colors.outline; font.family: Icons.font; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                                contentItem: Text {
+                                                    text: Icons.folder
+                                                    color: openHistoryFolderButton.enabled
+                                                        ? (openHistoryFolderButton.hovered ? Colors.primary : Colors.overBackground)
+                                                        : Colors.outline
+                                                    opacity: openHistoryFolderButton.hovered ? 1.0 : 0.8
+                                                    font.family: Icons.font
+                                                    font.pixelSize: 15
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
                                                 Accessible.name: YtdI18n.t("open_folder")
                                                 StyledToolTip {
                                                     show: openHistoryFolderButton.hovered
@@ -1121,7 +1267,15 @@ Item {
                                                 focusPolicy: Qt.NoFocus
                                                 onClicked: YtdService.removeHistoryItem(modelData.itemId || modelData.filename || modelData.url)
                                                 background: StyledRect { variant: removeHistoryButton.hovered ? "focus" : "common"; radius: Styling.radius(-5); enableShadow: false }
-                                                contentItem: Text { text: Icons.trash; color: removeHistoryButton.hovered ? Colors.red : Colors.overBackground; font.family: Icons.font; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                                contentItem: Text {
+                                                    text: Icons.trash
+                                                    color: removeHistoryButton.hovered ? Colors.red : Colors.overBackground
+                                                    opacity: removeHistoryButton.hovered ? 1.0 : 0.8
+                                                    font.family: Icons.font
+                                                    font.pixelSize: 15
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
                                                 Accessible.name: YtdI18n.t("remove_from_history")
                                                 StyledToolTip {
                                                     show: removeHistoryButton.hovered
