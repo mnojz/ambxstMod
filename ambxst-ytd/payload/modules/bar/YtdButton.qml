@@ -942,12 +942,11 @@ Item {
                             spacing: 6
                             visible: root.activeCardVisible
 
-                            StyledRect {
+                            Rectangle {
                                 Layout.fillWidth: true
                                 implicitHeight: detailsColumn.implicitHeight + 16
-                                variant: "common"
-                                radius: Styling.radius(-2)
-                                enableShadow: false
+                                radius: Styling.radius(-3)
+                                color: Qt.rgba(1, 1, 1, 0.04)
 
                                 ColumnLayout {
                                     id: detailsColumn
@@ -963,7 +962,7 @@ Item {
                                             Layout.preferredWidth: 56
                                             Layout.preferredHeight: 56
                                             radius: Styling.radius(-3)
-                                            color: Colors.surfaceVariant
+                                            color: Qt.rgba(1, 1, 1, 0.06)
                                             YtdIcon {
                                                 anchors.centerIn: parent
                                                 width: 24
@@ -1015,7 +1014,7 @@ Item {
                                                     Layout.fillWidth: true
                                                     height: 6
                                                     radius: 3
-                                                    color: Colors.surfaceBright
+                                                    color: Qt.rgba(1, 1, 1, 0.08)
                                                     Rectangle {
                                                         width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
                                                         height: parent.height
@@ -1067,7 +1066,10 @@ Item {
                                                         focusPolicy: Qt.NoFocus
                                                         visible: YtdService.running
                                                         onClicked: YtdService.cancel()
-                                                        background: StyledRect { variant: cancelButton.hovered ? "focus" : "common"; radius: Styling.radius(-5); enableShadow: false }
+                                                        background: Rectangle {
+                                                            radius: Styling.radius(-5)
+                                                            color: cancelButton.hovered ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.18) : "transparent"
+                                                        }
                                                         contentItem: Text { text: Icons.cancel; color: cancelButton.hovered ? Colors.red : Colors.overBackground; font.family: Icons.font; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                                         Accessible.name: YtdI18n.t("stop_download")
                                                         StyledToolTip {
@@ -1147,13 +1149,22 @@ Item {
                                 id: historyRepeater
                                 model: YtdService.history
 
-                                delegate: StyledRect {
+                                delegate: Rectangle {
+                                    id: historyCard
                                     required property var modelData
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 56
-                                    variant: "common"
-                                    radius: Styling.radius(-2)
-                                    enableShadow: false
+                                    radius: Styling.radius(-3)
+                                    color: historyCardHover.hovered ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(1, 1, 1, 0.04)
+
+                                    Behavior on color {
+                                        enabled: Config.animDuration > 0
+                                        ColorAnimation { duration: 120 }
+                                    }
+
+                                    HoverHandler {
+                                        id: historyCardHover
+                                    }
 
                                     RowLayout {
                                         anchors.fill: parent
@@ -1163,7 +1174,7 @@ Item {
                                             Layout.preferredWidth: 40
                                             Layout.preferredHeight: 40
                                             radius: Styling.radius(-4)
-                                            color: Colors.surfaceVariant
+                                            color: Qt.rgba(1, 1, 1, 0.06)
                                             YtdIcon {
                                                 anchors.centerIn: parent
                                                 width: 18
@@ -1199,7 +1210,7 @@ Item {
                                                     Layout.preferredHeight: 18
                                                     Layout.preferredWidth: formatBadgeText.implicitWidth + 8
                                                     radius: Styling.radius(-5)
-                                                    color: Colors.surfaceBright
+                                                    color: Qt.rgba(1, 1, 1, 0.08)
                                                     Text {
                                                         id: formatBadgeText
                                                         anchors.centerIn: parent
@@ -1231,7 +1242,12 @@ Item {
                                                 focusPolicy: Qt.NoFocus
                                                 enabled: modelData.filename !== ""
                                                 onClicked: root.openHistoryFolder(modelData.filename)
-                                                background: StyledRect { variant: openHistoryFolderButton.hovered ? "focus" : "common"; radius: Styling.radius(-5); enableShadow: false }
+                                                background: Rectangle {
+                                                    radius: Styling.radius(-5)
+                                                    color: openHistoryFolderButton.hovered
+                                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
+                                                        : "transparent"
+                                                }
                                                 contentItem: Text {
                                                     text: Icons.folder
                                                     color: openHistoryFolderButton.enabled
@@ -1255,7 +1271,12 @@ Item {
                                                 Layout.preferredHeight: 26
                                                 focusPolicy: Qt.NoFocus
                                                 onClicked: YtdService.removeHistoryItem(modelData.itemId || modelData.filename || modelData.url)
-                                                background: StyledRect { variant: removeHistoryButton.hovered ? "focus" : "common"; radius: Styling.radius(-5); enableShadow: false }
+                                                background: Rectangle {
+                                                    radius: Styling.radius(-5)
+                                                    color: removeHistoryButton.hovered
+                                                        ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.18)
+                                                        : "transparent"
+                                                }
                                                 contentItem: Text {
                                                     text: Icons.trash
                                                     color: removeHistoryButton.hovered ? Colors.red : Colors.overBackground
