@@ -47,9 +47,9 @@ Item {
     readonly property color barTrackColor: Colors.background
     readonly property color barProgressColor: Colors.overBackground
 
-    // Unified neutral background colors for cards and input elements
-    readonly property color cardBgColor: Qt.rgba(1, 1, 1, 0.09)
-    readonly property color cardBgHoverColor: Qt.rgba(1, 1, 1, 0.14)
+    // Cool bluish-tinted background colors for cards and input elements
+    readonly property color cardBgColor: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
+    readonly property color cardBgHoverColor: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
 
     // Display labels for the values in YtdService.formats.
     readonly property var formatOptions: [
@@ -275,7 +275,7 @@ Item {
                             color: optionButton.isSelected
                                 ? Colors.primary
                                 : (optionButton.hovered ? Colors.cyan : Colors.overBackground)
-                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 1.0 : 0.65)
+                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 1.0 : 0.90)
                             font.family: Styling.defaultFont
                             font.pixelSize: 13
                             font.bold: optionButton.isSelected
@@ -729,7 +729,7 @@ Item {
                                     focus: popup.isOpen
                                     background: Item {}
                                     color: Colors.overBackground
-                                    placeholderTextColor: Qt.rgba(1, 1, 1, 0.40)
+                                    placeholderTextColor: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.45)
                                     font.family: Styling.defaultFont
                                     font.pixelSize: Styling.fontSize(0)
                                     leftPadding: 0
@@ -750,9 +750,9 @@ Item {
                                     background: Rectangle {
                                         radius: 13
                                         color: YtdService.playlistScope
-                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
+                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.25)
                                             : (inlinePlaylistBtn.hovered
-                                                ? Qt.rgba(1, 1, 1, 0.10)
+                                                ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.16)
                                                 : "transparent")
                                     }
                                     contentItem: Text {
@@ -760,7 +760,7 @@ Item {
                                         color: YtdService.playlistScope
                                             ? Colors.primary
                                             : (inlinePlaylistBtn.hovered ? Colors.primary : Colors.overBackground)
-                                        opacity: YtdService.playlistScope ? 1.0 : (inlinePlaylistBtn.hovered ? 1.0 : 0.75)
+                                        opacity: YtdService.playlistScope ? 1.0 : (inlinePlaylistBtn.hovered ? 1.0 : 0.85)
                                         font.family: Icons.font
                                         font.pixelSize: 15
                                         horizontalAlignment: Text.AlignHCenter
@@ -789,8 +789,8 @@ Item {
                                     background: Rectangle {
                                         radius: Styling.radius(-5)
                                         color: inlinePasteBtn.hovered
-                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
-                                            : Qt.rgba(1, 1, 1, 0.08)
+                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
+                                            : Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
                                     }
                                     contentItem: RowLayout {
                                         spacing: 4
@@ -799,7 +799,7 @@ Item {
                                             font.family: Icons.font
                                             font.pixelSize: 14
                                             color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
-                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
+                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.90
                                             verticalAlignment: Text.AlignVCenter
                                         }
                                         Text {
@@ -808,7 +808,7 @@ Item {
                                             font.pixelSize: Styling.fontSize(-2)
                                             font.bold: true
                                             color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
-                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
+                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.90
                                             verticalAlignment: Text.AlignVCenter
                                         }
                                     }
@@ -966,7 +966,7 @@ Item {
                                             Layout.preferredWidth: 56
                                             Layout.preferredHeight: 56
                                             radius: Styling.radius(-3)
-                                            color: Qt.rgba(1, 1, 1, 0.06)
+                                            color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.10)
                                             YtdIcon {
                                                 anchors.centerIn: parent
                                                 width: 24
@@ -1018,7 +1018,7 @@ Item {
                                                     Layout.fillWidth: true
                                                     height: 6
                                                     radius: 3
-                                                    color: Qt.rgba(1, 1, 1, 0.08)
+                                                    color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
                                                     Rectangle {
                                                         width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
                                                         height: parent.height
@@ -1178,7 +1178,7 @@ Item {
                                             Layout.preferredWidth: 40
                                             Layout.preferredHeight: 40
                                             radius: Styling.radius(-4)
-                                            color: Qt.rgba(1, 1, 1, 0.06)
+                                            color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.10)
                                             YtdIcon {
                                                 anchors.centerIn: parent
                                                 width: 18
@@ -1214,7 +1214,7 @@ Item {
                                                     Layout.preferredHeight: 18
                                                     Layout.preferredWidth: formatBadgeText.implicitWidth + 8
                                                     radius: Styling.radius(-5)
-                                                    color: Qt.rgba(1, 1, 1, 0.08)
+                                                    color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
                                                     Text {
                                                         id: formatBadgeText
                                                         anchors.centerIn: parent
