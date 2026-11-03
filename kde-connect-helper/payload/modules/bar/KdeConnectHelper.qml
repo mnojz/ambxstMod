@@ -162,7 +162,7 @@ Item {
         Accessible.name: control.labelText.length > 0 ? control.labelText : (control.tooltipText.length > 0 ? control.tooltipText : control.iconText)
         background: StyledRect {
             id: helperButtonBackground
-            variant: control.down || control.checked ? "primary" : (control.hovered || control.activeFocus ? "focus" : "common")
+            variant: control.down || control.checked ? "primary" : (control.hovered || control.visualFocus ? "focus" : "common")
             radius: Styling.radius(-4)
             enableShadow: false
         }
