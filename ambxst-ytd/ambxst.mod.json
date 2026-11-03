@@ -15,7 +15,7 @@
     "testedBaseCommits": ["3705f278f24a74718fc23772b47044e96701d53a"]
   },
   "dependencies": [],
-  "commands": ["python3", "yt-dlp", "ffmpeg", "wl-paste", "xdg-open"],
+  "commands": ["python3", "yt-dlp", "ffmpeg", "wl-paste", "xdg-open", "bash"],
   "permissions": [
     "Runs yt-dlp and ffmpeg to download media from a user-provided URL",
     "Writes audio to ~/Music and video to ~/Videos",

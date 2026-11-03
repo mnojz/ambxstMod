@@ -77,6 +77,16 @@ Item {
         return formatIndex(YtdService.defaultFormat);
     }
 
+    function formatColor(value) {
+        if (value === "mp3") return Colors.magenta;
+        if (value === "480p") return Colors.green;
+        if (value === "720p") return Colors.cyan;
+        if (value === "1080p") return Colors.primary;
+        if (value === "1440p") return Colors.tertiary;
+        if (value === "2160p") return Colors.yellow;
+        return Colors.primary;
+    }
+
     function startDownload() {
         var inputUrl = urlField.text.trim();
         if (inputUrl === "")
@@ -118,9 +128,7 @@ Item {
         var filename = String(path || "");
         if (filename === "")
             return;
-        var separator = filename.lastIndexOf("/");
-        var directory = separator > 0 ? filename.slice(0, separator) : ".";
-        openFolderProcess.command = ["xdg-open", directory];
+        openFolderProcess.command = ["bash", "-c", 'dir="${1/#\\~/$HOME}"; case "$dir" in *.*) dir="$(dirname "$dir")" ;; esac; xdg-open "$dir"', "--", filename];
         openFolderProcess.running = true;
     }
 
@@ -214,31 +222,34 @@ Item {
         }
     }
 
-    // Text labels are measured explicitly so every segment can be centered
-    // without the uneven left alignment produced by the shared icon switch.
-    component FormatSelector: StyledRect {
+    // Segmented quality/format selector with neutral semi-transparent track,
+    // smooth sliding translucent colored pill, and distinct hover tints.
+    component FormatSelector: Rectangle {
         id: selector
         property var options: []
         property int currentIndex: 0
-        property int padding: 2
+        property int padding: 3
         signal selected(int index)
 
         implicitHeight: 36
         radius: Styling.radius(-3)
-        variant: "common"
+        color: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04)
+
+        readonly property var currentOption: (options && currentIndex >= 0 && currentIndex < options.length) ? options[currentIndex] : null
+        readonly property color activeColor: currentOption ? root.formatColor(currentOption.value) : Colors.primary
 
         Item {
             anchors.fill: parent
             anchors.margins: selector.padding
 
-            StyledRect {
+            Rectangle {
                 id: highlight
                 property Item activeItem: optionRepeater.itemAt(selector.currentIndex)
                 x: activeItem ? activeItem.x : 0
                 width: activeItem ? activeItem.width : 48
                 height: parent.height
-                radius: Styling.radius(-5)
-                variant: "primary"
+                radius: Styling.radius(-4)
+                color: Qt.rgba(selector.activeColor.r, selector.activeColor.g, selector.activeColor.b, 0.22)
 
                 Behavior on x {
                     enabled: Config.animDuration > 0
@@ -252,6 +263,12 @@ Item {
                     NumberAnimation {
                         duration: Config.animDuration / 2
                         easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on color {
+                    enabled: Config.animDuration > 0
+                    ColorAnimation {
+                        duration: Config.animDuration / 2
                     }
                 }
             }
@@ -270,6 +287,9 @@ Item {
                         required property var modelData
                         required property int index
 
+                        readonly property bool isSelected: selector.currentIndex === optionButton.index
+                        readonly property color itemColor: root.formatColor(optionButton.modelData.value)
+
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
                         Layout.fillHeight: true
@@ -277,9 +297,14 @@ Item {
                         hoverEnabled: true
                         flat: true
                         background: Rectangle {
-                            color: optionButton.hovered && selector.currentIndex !== optionButton.index ? Colors.surfaceBright : "transparent"
-                            opacity: 0.35
-                            radius: Styling.radius(-5)
+                            radius: Styling.radius(-4)
+                            color: (!optionButton.isSelected && optionButton.hovered)
+                                ? Qt.rgba(optionButton.itemColor.r, optionButton.itemColor.g, optionButton.itemColor.b, 0.12)
+                                : "transparent"
+                            Behavior on color {
+                                enabled: Config.animDuration > 0
+                                ColorAnimation { duration: 120 }
+                            }
                         }
 
                         contentItem: Item {
@@ -287,12 +312,13 @@ Item {
                                 anchors.centerIn: parent
                                 width: parent.width
                                 text: optionButton.modelData.label
-                                color: selector.currentIndex === optionButton.index
-                                    ? Colors.overPrimary : Colors.overBackground
-                                opacity: selector.currentIndex === optionButton.index ? 1.0 : (optionButton.hovered ? 1.0 : 0.75)
+                                color: optionButton.isSelected
+                                    ? optionButton.itemColor
+                                    : (optionButton.hovered ? optionButton.itemColor : Colors.overBackground)
+                                opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 0.95 : 0.65)
                                 font.family: Styling.defaultFont
-                                font.pixelSize: 13
-                                font.bold: selector.currentIndex === optionButton.index
+                                font.pixelSize: 12
+                                font.bold: optionButton.isSelected
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -648,15 +674,15 @@ Item {
                                 background: Rectangle {
                                     radius: Styling.radius(-4)
                                     color: headerMusicFolderBtn.hovered
-                                        ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.12)
+                                        ? Qt.rgba(Colors.magenta.r, Colors.magenta.g, Colors.magenta.b, 0.15)
                                         : "transparent"
                                 }
                                 contentItem: Text {
-                                    text: Icons.headphones
-                                    color: headerMusicFolderBtn.hovered ? Colors.primary : Colors.overBackground
+                                    text: Icons.note
+                                    color: headerMusicFolderBtn.hovered ? Colors.magenta : Colors.overBackground
                                     opacity: headerMusicFolderBtn.hovered ? 1.0 : 0.8
                                     font.family: Icons.font
-                                    font.pixelSize: 17
+                                    font.pixelSize: 18
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -677,15 +703,15 @@ Item {
                                 background: Rectangle {
                                     radius: Styling.radius(-4)
                                     color: headerVideoFolderBtn.hovered
-                                        ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.12)
+                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
                                         : "transparent"
                                 }
                                 contentItem: Text {
-                                    text: Icons.folder
+                                    text: Icons.recordings
                                     color: headerVideoFolderBtn.hovered ? Colors.primary : Colors.overBackground
                                     opacity: headerVideoFolderBtn.hovered ? 1.0 : 0.8
                                     font.family: Icons.font
-                                    font.pixelSize: 17
+                                    font.pixelSize: 18
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -695,61 +721,29 @@ Item {
                                     tooltipText: "Open Videos Folder (~/Videos)"
                                 }
                             }
-
-                            // Clear History Button
-                            Button {
-                                id: headerClearHistoryBtn
-                                Layout.preferredWidth: 32
-                                Layout.preferredHeight: 32
-                                focusPolicy: Qt.NoFocus
-                                visible: YtdService.history.length > 0
-                                onClicked: YtdService.clearHistory()
-                                background: Rectangle {
-                                    radius: Styling.radius(-4)
-                                    color: headerClearHistoryBtn.hovered
-                                        ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
-                                        : "transparent"
-                                }
-                                contentItem: Text {
-                                    text: Icons.trash
-                                    color: headerClearHistoryBtn.hovered ? Colors.red : Colors.overBackground
-                                    opacity: headerClearHistoryBtn.hovered ? 1.0 : 0.8
-                                    font.family: Icons.font
-                                    font.pixelSize: 17
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                Accessible.name: YtdI18n.t("clear_history")
-                                StyledToolTip {
-                                    show: headerClearHistoryBtn.hovered
-                                    tooltipText: YtdI18n.t("clear_history")
-                                }
-                            }
                         }
 
                         // Row 2: Full-width Searchbar / URL Input
-                        StyledRect {
+                        Rectangle {
                             id: inputContainer
                             Layout.fillWidth: true
                             Layout.preferredHeight: 40
-                            variant: "common"
                             radius: Styling.radius(-3)
-                            enableShadow: false
+                            color: root.urlRejected
+                                ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
+                                : (urlField.activeFocus
+                                    ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
+                                    : (inputHover.hovered
+                                        ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
+                                        : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04)))
 
-                            // Soft semi-transparent background tint on hover / focus / error
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: parent.radius ?? 0
-                                color: root.urlRejected
-                                    ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.12)
-                                    : (urlField.activeFocus
-                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
-                                        : (inputContainer.hovered ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.05) : "transparent"))
+                            Behavior on color {
+                                enabled: Config.animDuration > 0
+                                ColorAnimation { duration: Config.animDuration / 2 }
+                            }
 
-                                Behavior on color {
-                                    enabled: Config.animDuration > 0
-                                    ColorAnimation { duration: Config.animDuration / 2 }
-                                }
+                            HoverHandler {
+                                id: inputHover
                             }
 
                             RowLayout {
@@ -914,19 +908,16 @@ Item {
                                 focusPolicy: Qt.NoFocus
                                 onClicked: YtdService.playlistScope = !YtdService.playlistScope
 
-                                background: StyledRect {
-                                    variant: playlistToggle.playlistOn
-                                        ? "primary"
-                                        : "common"
+                                background: Rectangle {
                                     radius: Styling.radius(-3)
-                                    enableShadow: false
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: parent.radius ?? 0
-                                        color: playlistToggle.hovered && !playlistToggle.playlistOn
+                                    color: playlistToggle.playlistOn
+                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
+                                        : (playlistToggle.hovered
                                             ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
-                                            : "transparent"
+                                            : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04))
+                                    Behavior on color {
+                                        enabled: Config.animDuration > 0
+                                        ColorAnimation { duration: 150 }
                                     }
                                 }
                                 contentItem: RowLayout {
@@ -935,7 +926,7 @@ Item {
                                     Text {
                                         text: playlistToggle.playlistOn ? Icons.list : Icons.play
                                         color: playlistToggle.playlistOn
-                                            ? Colors.overPrimary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
+                                            ? Colors.primary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
                                         opacity: playlistToggle.playlistOn ? 1.0 : (playlistToggle.hovered ? 1.0 : 0.8)
                                         font.family: Icons.font
                                         font.pixelSize: 15
@@ -945,7 +936,7 @@ Item {
                                     Text {
                                         text: playlistToggle.playlistOn ? "Playlist" : "Single"
                                         color: playlistToggle.playlistOn
-                                            ? Colors.overPrimary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
+                                            ? Colors.primary : (playlistToggle.hovered ? Colors.primary : Colors.overBackground)
                                         opacity: playlistToggle.playlistOn ? 1.0 : (playlistToggle.hovered ? 1.0 : 0.85)
                                         font.family: Styling.defaultFont
                                         font.pixelSize: 12
@@ -972,26 +963,27 @@ Item {
                                 focusPolicy: Qt.NoFocus
                                 enabled: root.urlFilled && root.urlValid && !YtdService.running
                                 onClicked: root.startDownload()
-                                background: StyledRect {
-                                    variant: downloadButton.enabled ? "primary" : "common"
+                                background: Rectangle {
                                     radius: Styling.radius(-3)
-                                    enableShadow: false
-                                    opacity: downloadButton.enabled ? 1.0 : 0.65
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: parent.radius ?? 0
-                                        color: downloadButton.hovered && !downloadButton.enabled
+                                    color: downloadButton.enabled
+                                        ? (downloadButton.hovered
+                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.32)
+                                            : Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22))
+                                        : (downloadButton.hovered
                                             ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
-                                            : "transparent"
+                                            : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.04))
+
+                                    Behavior on color {
+                                        enabled: Config.animDuration > 0
+                                        ColorAnimation { duration: 150 }
                                     }
                                 }
                                 contentItem: Text {
                                     text: Icons.arrowFatLinesDown
-                                    color: downloadButton.enabled ? Colors.overPrimary : Colors.overBackground
-                                    opacity: downloadButton.enabled ? 1.0 : 0.45
+                                    color: downloadButton.enabled ? Colors.primary : Colors.overBackground
+                                    opacity: downloadButton.enabled ? 1.0 : 0.4
                                     font.family: Icons.font
-                                    font.pixelSize: 18
+                                    font.pixelSize: 19
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -1184,6 +1176,34 @@ Item {
                                 font.letterSpacing: 0.5
                             }
                             Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.4 }
+
+                            Button {
+                                id: clearHistoryButton
+                                Layout.preferredWidth: 26
+                                Layout.preferredHeight: 26
+                                focusPolicy: Qt.NoFocus
+                                onClicked: YtdService.clearHistory()
+                                background: Rectangle {
+                                    radius: Styling.radius(-5)
+                                    color: clearHistoryButton.hovered
+                                        ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
+                                        : "transparent"
+                                }
+                                contentItem: Text {
+                                    text: Icons.trash
+                                    color: clearHistoryButton.hovered ? Colors.red : Colors.overBackground
+                                    opacity: clearHistoryButton.hovered ? 1.0 : 0.6
+                                    font.family: Icons.font
+                                    font.pixelSize: 14
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                Accessible.name: YtdI18n.t("clear_history")
+                                StyledToolTip {
+                                    show: clearHistoryButton.hovered
+                                    tooltipText: YtdI18n.t("clear_history")
+                                }
+                            }
                         }
 
                         ColumnLayout {
