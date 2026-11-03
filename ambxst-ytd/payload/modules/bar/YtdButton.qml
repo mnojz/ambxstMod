@@ -65,6 +65,7 @@ Item {
         urlField.text, YtdService.playlistScope ? "playlist" : "single")
     readonly property bool urlValid: urlRequest.valid
     readonly property bool urlRejected: urlFilled && !urlValid
+    readonly property bool hasPlaylistParam: urlFilled && !!urlRequest?.hasPlaylist
     readonly property string urlMessage: urlRequest.reason === "playlist_required"
         ? YtdI18n.t("playlist_required") : YtdI18n.t("invalid_url")
 
@@ -225,8 +226,6 @@ Item {
         implicitHeight: 36
         radius: Styling.radius(-3)
         variant: "common"
-        border.width: 1
-        border.color: Colors.surfaceBright
 
         Item {
             anchors.fill: parent
@@ -610,7 +609,7 @@ Item {
 
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: 4
 
                             YtdIcon {
                                 Layout.preferredWidth: 26
@@ -639,32 +638,65 @@ Item {
                                 }
                             }
 
+                            // Music Folder Button (~/Music)
                             Button {
-                                id: headerOpenFolderBtn
+                                id: headerMusicFolderBtn
                                 Layout.preferredWidth: 32
                                 Layout.preferredHeight: 32
                                 focusPolicy: Qt.NoFocus
-                                onClicked: root.openHistoryFolder(YtdService.mediaFormat === "mp3" ? "~/Music" : "~/Videos")
-                                background: StyledRect {
-                                    variant: headerOpenFolderBtn.hovered ? "focus" : "common"
+                                onClicked: root.openHistoryFolder("~/Music")
+                                background: Rectangle {
                                     radius: Styling.radius(-4)
-                                    enableShadow: false
+                                    color: headerMusicFolderBtn.hovered
+                                        ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.12)
+                                        : "transparent"
                                 }
                                 contentItem: Text {
-                                    text: Icons.folder
-                                    color: Colors.overBackground
+                                    text: Icons.headphones
+                                    color: headerMusicFolderBtn.hovered ? Colors.primary : Colors.overBackground
+                                    opacity: headerMusicFolderBtn.hovered ? 1.0 : 0.8
                                     font.family: Icons.font
                                     font.pixelSize: 17
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
-                                Accessible.name: YtdI18n.t("open_folder")
+                                Accessible.name: "Open Music Folder"
                                 StyledToolTip {
-                                    show: headerOpenFolderBtn.hovered
-                                    tooltipText: YtdI18n.t("open_folder")
+                                    show: headerMusicFolderBtn.hovered
+                                    tooltipText: "Open Music Folder (~/Music)"
                                 }
                             }
 
+                            // Videos Folder Button (~/Videos)
+                            Button {
+                                id: headerVideoFolderBtn
+                                Layout.preferredWidth: 32
+                                Layout.preferredHeight: 32
+                                focusPolicy: Qt.NoFocus
+                                onClicked: root.openHistoryFolder("~/Videos")
+                                background: Rectangle {
+                                    radius: Styling.radius(-4)
+                                    color: headerVideoFolderBtn.hovered
+                                        ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.12)
+                                        : "transparent"
+                                }
+                                contentItem: Text {
+                                    text: Icons.folder
+                                    color: headerVideoFolderBtn.hovered ? Colors.primary : Colors.overBackground
+                                    opacity: headerVideoFolderBtn.hovered ? 1.0 : 0.8
+                                    font.family: Icons.font
+                                    font.pixelSize: 17
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                Accessible.name: "Open Videos Folder"
+                                StyledToolTip {
+                                    show: headerVideoFolderBtn.hovered
+                                    tooltipText: "Open Videos Folder (~/Videos)"
+                                }
+                            }
+
+                            // Clear History Button
                             Button {
                                 id: headerClearHistoryBtn
                                 Layout.preferredWidth: 32
@@ -672,14 +704,16 @@ Item {
                                 focusPolicy: Qt.NoFocus
                                 visible: YtdService.history.length > 0
                                 onClicked: YtdService.clearHistory()
-                                background: StyledRect {
-                                    variant: headerClearHistoryBtn.hovered ? "focus" : "common"
+                                background: Rectangle {
                                     radius: Styling.radius(-4)
-                                    enableShadow: false
+                                    color: headerClearHistoryBtn.hovered
+                                        ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
+                                        : "transparent"
                                 }
                                 contentItem: Text {
                                     text: Icons.trash
-                                    color: Colors.overBackground
+                                    color: headerClearHistoryBtn.hovered ? Colors.red : Colors.overBackground
+                                    opacity: headerClearHistoryBtn.hovered ? 1.0 : 0.8
                                     font.family: Icons.font
                                     font.pixelSize: 17
                                     horizontalAlignment: Text.AlignHCenter
@@ -693,174 +727,134 @@ Item {
                             }
                         }
 
-                        // Row 2: Searchbar / URL Input & Hero Download Action
-                        RowLayout {
+                        // Row 2: Full-width Searchbar / URL Input
+                        StyledRect {
+                            id: inputContainer
                             Layout.fillWidth: true
-                            spacing: 8
+                            Layout.preferredHeight: 40
+                            variant: "common"
+                            radius: Styling.radius(-3)
+                            enableShadow: false
 
-                            StyledRect {
-                                id: inputContainer
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 42
-                                variant: "common"
-                                radius: Styling.radius(-3)
-                                enableShadow: false
-                                border.width: urlField.activeFocus ? 2 : (root.urlRejected ? 1.5 : 1)
-                                border.color: root.urlRejected ? Colors.red : (urlField.activeFocus ? Colors.primary : Colors.surfaceBright)
+                            // Soft semi-transparent background tint on hover / focus / error
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: parent.radius ?? 0
+                                color: root.urlRejected
+                                    ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.12)
+                                    : (urlField.activeFocus
+                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
+                                        : (inputContainer.hovered ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.05) : "transparent"))
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 8
-                                    spacing: 8
-
-                                    // Leading Icon (Link)
-                                    Text {
-                                        text: Icons.link
-                                        font.family: Icons.font
-                                        font.pixelSize: 18
-                                        color: urlField.activeFocus ? Colors.primary : Colors.overBackground
-                                        opacity: urlField.activeFocus ? 1.0 : 0.6
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    TextField {
-                                        id: urlField
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        placeholderText: YtdI18n.t("url_placeholder")
-                                        text: YtdService.url
-                                        selectByMouse: true
-                                        activeFocusOnTab: true
-                                        focus: popup.isOpen
-                                        background: Item {}
-                                        color: Colors.overBackground
-                                        placeholderTextColor: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.45)
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(0)
-                                        leftPadding: 0
-                                        rightPadding: 0
-                                        verticalAlignment: Text.AlignVCenter
-                                        onAccepted: root.startDownload()
-                                        Keys.onEscapePressed: popup.close()
-                                    }
-
-                                    // Contextual Trailing Button: "Paste" chip when empty, "✕" clear when filled
-                                    Button {
-                                        id: inlinePasteBtn
-                                        visible: urlField.text.length === 0
-                                        Layout.preferredHeight: 28
-                                        leftPadding: 8
-                                        rightPadding: 8
-                                        focusPolicy: Qt.NoFocus
-                                        enabled: !YtdService.clipboardBusy
-                                        onClicked: YtdService.readClipboard()
-                                        background: StyledRect {
-                                            variant: inlinePasteBtn.hovered ? "focus" : "common"
-                                            radius: Styling.radius(-5)
-                                            enableShadow: false
-                                            border.width: 1
-                                            border.color: Colors.surfaceBright
-                                        }
-                                        contentItem: RowLayout {
-                                            spacing: 4
-                                            Text {
-                                                text: Icons.clipboard
-                                                font.family: Icons.font
-                                                font.pixelSize: 14
-                                                color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
-                                                opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            Text {
-                                                text: "Paste"
-                                                font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(-2)
-                                                font.bold: true
-                                                color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
-                                                opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                        }
-                                        Accessible.name: YtdI18n.t("paste_from_clipboard")
-                                        StyledToolTip {
-                                            show: inlinePasteBtn.hovered
-                                            tooltipText: YtdI18n.t("paste_from_clipboard")
-                                        }
-                                    }
-
-                                    Button {
-                                        id: inlineClearBtn
-                                        visible: urlField.text.length > 0
-                                        Layout.preferredWidth: 26
-                                        Layout.preferredHeight: 26
-                                        focusPolicy: Qt.NoFocus
-                                        onClicked: urlField.clear()
-                                        background: Rectangle {
-                                            color: inlineClearBtn.hovered ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.2) : "transparent"
-                                            radius: 13
-                                        }
-                                        contentItem: Text {
-                                            text: Icons.cancel
-                                            color: inlineClearBtn.hovered ? Colors.red : Colors.overBackground
-                                            opacity: inlineClearBtn.hovered ? 1.0 : 0.7
-                                            font.family: Icons.font
-                                            font.pixelSize: 16
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        Accessible.name: YtdI18n.t("clear_url")
-                                        StyledToolTip {
-                                            show: inlineClearBtn.hovered
-                                            tooltipText: YtdI18n.t("clear_url")
-                                        }
-                                    }
+                                Behavior on color {
+                                    enabled: Config.animDuration > 0
+                                    ColorAnimation { duration: Config.animDuration / 2 }
                                 }
                             }
 
-                            // Prominent Download Action Button with Label & Fat Download Glyph
-                            Button {
-                                id: downloadButton
-                                Layout.preferredWidth: 108
-                                Layout.preferredHeight: 42
-                                focusPolicy: Qt.NoFocus
-                                enabled: root.urlFilled && root.urlValid && !YtdService.running
-                                onClicked: root.startDownload()
-                                background: StyledRect {
-                                    variant: downloadButton.enabled ? "primary" : "common"
-                                    radius: Styling.radius(-3)
-                                    enableShadow: false
-                                    border.width: downloadButton.enabled ? 0 : 1
-                                    border.color: Colors.surfaceBright
-                                    opacity: downloadButton.enabled ? 1.0 : 0.65
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 6
+                                spacing: 8
+
+                                Text {
+                                    text: Icons.link
+                                    font.family: Icons.font
+                                    font.pixelSize: 17
+                                    color: urlField.activeFocus ? Colors.primary : Colors.overBackground
+                                    opacity: urlField.activeFocus ? 1.0 : 0.5
+                                    verticalAlignment: Text.AlignVCenter
                                 }
-                                contentItem: RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    Text {
-                                        text: Icons.arrowFatLinesDown
-                                        color: downloadButton.enabled ? Colors.overPrimary : Colors.overBackground
-                                        opacity: downloadButton.enabled ? 1.0 : 0.5
+
+                                TextField {
+                                    id: urlField
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    placeholderText: YtdI18n.t("url_placeholder")
+                                    text: YtdService.url
+                                    selectByMouse: true
+                                    activeFocusOnTab: true
+                                    focus: popup.isOpen
+                                    background: Item {}
+                                    color: Colors.overBackground
+                                    placeholderTextColor: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.45)
+                                    font.family: Styling.defaultFont
+                                    font.pixelSize: Styling.fontSize(0)
+                                    leftPadding: 0
+                                    rightPadding: 0
+                                    verticalAlignment: Text.AlignVCenter
+                                    onAccepted: root.startDownload()
+                                    Keys.onEscapePressed: popup.close()
+                                }
+
+                                Button {
+                                    id: inlinePasteBtn
+                                    visible: urlField.text.length === 0
+                                    Layout.preferredHeight: 28
+                                    leftPadding: 8
+                                    rightPadding: 8
+                                    focusPolicy: Qt.NoFocus
+                                    enabled: !YtdService.clipboardBusy
+                                    onClicked: YtdService.readClipboard()
+                                    background: Rectangle {
+                                        radius: Styling.radius(-5)
+                                        color: inlinePasteBtn.hovered
+                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
+                                            : Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
+                                    }
+                                    contentItem: RowLayout {
+                                        spacing: 4
+                                        Text {
+                                            text: Icons.clipboard
+                                            font.family: Icons.font
+                                            font.pixelSize: 14
+                                            color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
+                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        Text {
+                                            text: "Paste"
+                                            font.family: Styling.defaultFont
+                                            font.pixelSize: Styling.fontSize(-2)
+                                            font.bold: true
+                                            color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
+                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.85
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                    }
+                                    Accessible.name: YtdI18n.t("paste_from_clipboard")
+                                    StyledToolTip {
+                                        show: inlinePasteBtn.hovered
+                                        tooltipText: YtdI18n.t("paste_from_clipboard")
+                                    }
+                                }
+
+                                Button {
+                                    id: inlineClearBtn
+                                    visible: urlField.text.length > 0
+                                    Layout.preferredWidth: 26
+                                    Layout.preferredHeight: 26
+                                    focusPolicy: Qt.NoFocus
+                                    onClicked: urlField.clear()
+                                    background: Rectangle {
+                                        color: inlineClearBtn.hovered ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.2) : "transparent"
+                                        radius: 13
+                                    }
+                                    contentItem: Text {
+                                        text: Icons.cancel
+                                        color: inlineClearBtn.hovered ? Colors.red : Colors.overBackground
+                                        opacity: inlineClearBtn.hovered ? 1.0 : 0.7
                                         font.family: Icons.font
-                                        font.pixelSize: 18
+                                        font.pixelSize: 16
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
                                     }
-                                    Text {
-                                        text: YtdI18n.t("download")
-                                        color: downloadButton.enabled ? Colors.overPrimary : Colors.overBackground
-                                        opacity: downloadButton.enabled ? 1.0 : 0.5
-                                        font.family: Styling.defaultFont
-                                        font.pixelSize: Styling.fontSize(-1)
-                                        font.bold: true
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
+                                    Accessible.name: YtdI18n.t("clear_url")
+                                    StyledToolTip {
+                                        show: inlineClearBtn.hovered
+                                        tooltipText: YtdI18n.t("clear_url")
                                     }
-                                }
-                                Accessible.name: YtdI18n.t("download")
-                                StyledToolTip {
-                                    show: downloadButton.hovered
-                                    tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
                                 }
                             }
                         }
@@ -887,10 +881,10 @@ Item {
                             }
                         }
 
-                        // Row 3: Quality Segmented Selector + Scope Toggle Pill
+                        // Row 3: Quality Segmented Selector + Contextual Playlist Toggle + Icon-Only Download Button
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: 6
 
                             FormatSelector {
                                 id: formatSwitch
@@ -909,9 +903,11 @@ Item {
                                 }
                             }
 
+                            // Contextual Playlist Scope Toggle: ONLY visible when URL contains a playlist parameter!
                             Button {
                                 id: playlistToggle
                                 readonly property bool playlistOn: YtdService.playlistScope
+                                visible: root.hasPlaylistParam
 
                                 Layout.preferredWidth: 84
                                 Layout.preferredHeight: 36
@@ -921,11 +917,17 @@ Item {
                                 background: StyledRect {
                                     variant: playlistToggle.playlistOn
                                         ? "primary"
-                                        : (playlistToggle.hovered ? "focus" : "common")
+                                        : "common"
                                     radius: Styling.radius(-3)
                                     enableShadow: false
-                                    border.width: playlistToggle.playlistOn ? 0 : 1
-                                    border.color: Colors.surfaceBright
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: parent.radius ?? 0
+                                        color: playlistToggle.hovered && !playlistToggle.playlistOn
+                                            ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
+                                            : "transparent"
+                                    }
                                 }
                                 contentItem: RowLayout {
                                     anchors.centerIn: parent
@@ -961,6 +963,44 @@ Item {
                                         : YtdI18n.t("scope_single")
                                 }
                             }
+
+                            // Icon-Only Download Action Button
+                            Button {
+                                id: downloadButton
+                                Layout.preferredWidth: 42
+                                Layout.preferredHeight: 36
+                                focusPolicy: Qt.NoFocus
+                                enabled: root.urlFilled && root.urlValid && !YtdService.running
+                                onClicked: root.startDownload()
+                                background: StyledRect {
+                                    variant: downloadButton.enabled ? "primary" : "common"
+                                    radius: Styling.radius(-3)
+                                    enableShadow: false
+                                    opacity: downloadButton.enabled ? 1.0 : 0.65
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: parent.radius ?? 0
+                                        color: downloadButton.hovered && !downloadButton.enabled
+                                            ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
+                                            : "transparent"
+                                    }
+                                }
+                                contentItem: Text {
+                                    text: Icons.arrowFatLinesDown
+                                    color: downloadButton.enabled ? Colors.overPrimary : Colors.overBackground
+                                    opacity: downloadButton.enabled ? 1.0 : 0.45
+                                    font.family: Icons.font
+                                    font.pixelSize: 18
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                Accessible.name: YtdI18n.t("download")
+                                StyledToolTip {
+                                    show: downloadButton.hovered
+                                    tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
+                                }
+                            }
                         }
 
                         Connections {
@@ -983,8 +1023,6 @@ Item {
                                 variant: "common"
                                 radius: Styling.radius(-2)
                                 enableShadow: false
-                                border.width: 1
-                                border.color: Colors.surfaceBright
 
                                 ColumnLayout {
                                     id: detailsColumn
@@ -1163,8 +1201,6 @@ Item {
                                     variant: "common"
                                     radius: Styling.radius(-2)
                                     enableShadow: false
-                                    border.width: 1
-                                    border.color: Colors.surfaceBright
 
                                     RowLayout {
                                         anchors.fill: parent
