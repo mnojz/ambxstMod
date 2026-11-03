@@ -1312,8 +1312,8 @@ Item {
         // One page scrolls as a single unit: header, URL field, format
         // selector, the active card, and every history card. Tweak this
         // value to change the popup viewport height.
-        readonly property int availableHeight: Math.max(240, screenHeight - 48)
-        readonly property int maximumContentHeight: 350
+        readonly property int availableHeight: Math.max(180, screenHeight - 48)
+        readonly property int maximumContentHeight: 262
         // The format row is fixed width: FormatSelector sizes itself from its
         // chips and the scope toggle adds 44px, so ~350px of content is the
         // point below which the selector row starts to clip. 404 keeps roughly
