@@ -126,6 +126,14 @@ Item {
         openFolderProcess.running = true;
     }
 
+    function playHistoryFile(path) {
+        var filename = String(path || "");
+        if (filename === "")
+            return;
+        openFolderProcess.command = ["bash", "-c", 'file="${1/#\\~/$HOME}"; if [ -f "$file" ]; then xdg-open "$file"; else xdg-open "$(dirname "$file")"; fi', "--", filename];
+        openFolderProcess.running = true;
+    }
+
     // IpcHandler functions are registered as void: returning a value makes Qt
     // log "should be coerced to void" on every browser-triggered download.
     property IpcHandler ipc: IpcHandler {
@@ -1159,7 +1167,7 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 56
                                     radius: Styling.radius(-3)
-                                    color: historyCardHover.hovered ? root.cardBgHoverColor : root.cardBgColor
+                                    color: (historyCardHover.hovered || cardClickArea.containsMouse) ? root.cardBgHoverColor : root.cardBgColor
 
                                     Behavior on color {
                                         enabled: Config.animDuration > 0
@@ -1168,6 +1176,25 @@ Item {
 
                                     HoverHandler {
                                         id: historyCardHover
+                                    }
+
+                                    MouseArea {
+                                        id: cardClickArea
+                                        anchors.left: parent.left
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        anchors.right: actionButtonsRow.left
+                                        cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (modelData.filename)
+                                                root.playHistoryFile(modelData.filename);
+                                        }
+                                    }
+
+                                    StyledToolTip {
+                                        show: cardClickArea.containsMouse && !openHistoryFolderButton.hovered && !removeHistoryButton.hovered
+                                        tooltipText: "Play " + (modelData.title || "media")
                                     }
 
                                     RowLayout {
@@ -1193,6 +1220,19 @@ Item {
                                                 fillMode: Image.PreserveAspectCrop
                                                 asynchronous: true
                                                 smooth: true
+                                            }
+                                            // Play overlay on hover
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                color: Qt.rgba(0, 0, 0, 0.45)
+                                                visible: cardClickArea.containsMouse
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: Icons.play
+                                                    color: Colors.white
+                                                    font.family: Icons.font
+                                                    font.pixelSize: 16
+                                                }
                                             }
                                         }
                                         ColumnLayout {
@@ -1237,6 +1277,7 @@ Item {
                                             }
                                         }
                                         RowLayout {
+                                            id: actionButtonsRow
                                             Layout.preferredWidth: 54
                                             spacing: 2
                                             Button {
@@ -1313,7 +1354,7 @@ Item {
         // selector, the active card, and every history card. Tweak this
         // value to change the popup viewport height.
         readonly property int availableHeight: Math.max(180, screenHeight - 48)
-        readonly property int maximumContentHeight: 262
+        readonly property int maximumContentHeight: 272
         // The format row is fixed width: FormatSelector sizes itself from its
         // chips and the scope toggle adds 44px, so ~350px of content is the
         // point below which the selector row starts to clip. 404 keeps roughly
