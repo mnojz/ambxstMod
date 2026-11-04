@@ -47,10 +47,6 @@ Item {
     readonly property color barTrackColor: Colors.background
     readonly property color barProgressColor: Colors.overBackground
 
-    // Cool bluish-tinted background colors for cards and input elements
-    readonly property color cardBgColor: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
-    readonly property color cardBgHoverColor: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
-
     // Display labels for the values in YtdService.formats.
     readonly property var formatOptions: [
         { label: "MP3", value: "mp3" },
@@ -121,47 +117,84 @@ Item {
     property var existingFiles: ({})
     property bool checkPending: false
 
-    function executeDetached(targetPath, isDir) {
-        var filename = String(targetPath || "");
+    function openHistoryFolder(path) {
+        var filename = String(path || "");
         if (filename === "")
             return;
-        try {
-            var proc = Qt.createQmlObject('import Quickshell.Io; Process {}', root);
-            proc.command = [
-                "bash", "-c",
-                'target="${1/#\\~/$HOME}"; ' +
-                'if [ "$2" = "dir" ]; then ' +
-                '  case "$target" in *.*) target="$(dirname "$target")" ;; esac; ' +
-                '  mkdir -p "$target"; ' +
-                'fi; ' +
-                '(setsid gio open "$target" || setsid xdg-open "$target") </dev/null >/dev/null 2>&1 &',
-                "--", filename, isDir ? "dir" : "file"
-            ];
-            proc.exited.connect(function() {
-                proc.destroy();
-            });
-            proc.running = true;
-        } catch (e) {
-            openerProcess.command = [
-                "bash", "-c",
-                'target="${1/#\\~/$HOME}"; ' +
-                'if [ "$2" = "dir" ]; then ' +
-                '  case "$target" in *.*) target="$(dirname "$target")" ;; esac; ' +
-                '  mkdir -p "$target"; ' +
-                'fi; ' +
-                '(setsid gio open "$target" || setsid xdg-open "$target") </dev/null >/dev/null 2>&1 &',
-                "--", filename, isDir ? "dir" : "file"
-            ];
-            openerProcess.running = true;
-        }
-    }
-
-    function openHistoryFolder(path) {
-        executeDetached(path, true);
+        openerProcess.running = false;
+        openerProcess.command = [
+            "bash", "-c",
+            'f="${1/#\\~/$HOME}"; case "$f" in *.*) f="$(dirname "$f")" ;; esac; mkdir -p "$f" 2>/dev/null || true; [ -d "$f" ] || f="$(dirname "$f")"; (setsid -f gio open "$f" || setsid -f xdg-open "$f") </dev/null >/dev/null 2>&1',
+            "--", filename
+        ];
+        openerProcess.running = true;
     }
 
     function playHistoryFile(path) {
-        executeDetached(path, false);
+        var filename = String(path || "");
+        if (filename === "")
+            return;
+        openerProcess.running = false;
+        openerProcess.command = [
+            "bash", "-c",
+            'f="${1/#\\~/$HOME}"; (setsid -f gio open "$f" || setsid -f xdg-open "$f") </dev/null >/dev/null 2>&1',
+            "--", filename
+        ];
+        openerProcess.running = true;
+    }
+
+    // Standard button matching kde-connect-helper style and theme tokens
+    component HelperButton: Button {
+        id: control
+        property string iconText: ""
+        property string labelText: ""
+        property string tooltipText: ""
+        property bool danger: false
+        property bool primary: false
+        implicitHeight: 36
+        leftPadding: control.labelText.length > 0 ? 8 : 0
+        rightPadding: control.labelText.length > 0 ? 8 : 0
+        activeFocusOnTab: true
+        Accessible.name: control.labelText.length > 0 ? control.labelText : (control.tooltipText.length > 0 ? control.tooltipText : control.iconText)
+        background: StyledRect {
+            id: helperButtonBackground
+            variant: control.primary
+                ? (control.down ? "primaryfocus" : "primary")
+                : (control.down || control.checked
+                    ? "primary"
+                    : (control.hovered || control.visualFocus ? "focus" : "common"))
+            radius: Styling.radius(-4)
+            enableShadow: false
+        }
+        contentItem: RowLayout {
+            spacing: control.iconText.length > 0 && control.labelText.length > 0 ? 6 : 0
+            Text {
+                visible: control.iconText.length > 0
+                Layout.alignment: control.labelText.length === 0 ? Qt.AlignCenter : Qt.AlignVCenter
+                text: control.iconText
+                font.family: Icons.font
+                font.pixelSize: control.labelText.length === 0 ? 18 : 16
+                color: control.danger && control.hovered ? Colors.red : helperButtonBackground.item
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            Text {
+                visible: control.labelText.length > 0
+                Layout.fillWidth: true
+                text: control.labelText
+                color: control.danger && control.hovered ? Colors.red : helperButtonBackground.item
+                font.family: Styling.defaultFont
+                font.pixelSize: Styling.fontSize(-1)
+                font.bold: control.primary
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        StyledToolTip {
+            show: control.hovered && control.tooltipText.length > 0
+            tooltipText: control.tooltipText
+        }
     }
 
     // IpcHandler functions are registered as void: returning a value makes Qt
@@ -254,9 +287,8 @@ Item {
         }
     }
 
-    // Segmented quality/format selector with neutral semi-transparent track,
-    // equal active and hover thumb sizing, and distinct text color hierarchy.
-    component FormatSelector: Rectangle {
+    // Segmented quality/format selector matching kde-connect-helper styling
+    component FormatSelector: StyledRect {
         id: selector
         property var options: []
         property int currentIndex: 0
@@ -265,7 +297,8 @@ Item {
 
         implicitHeight: 36
         radius: Styling.radius(-3)
-        color: root.cardBgColor
+        variant: "internalbg"
+        enableShadow: false
 
         RowLayout {
             anchors.fill: parent
@@ -290,18 +323,14 @@ Item {
                     hoverEnabled: true
                     flat: true
 
-                    background: Rectangle {
+                    background: StyledRect {
+                        id: optionBg
                         anchors.fill: parent
                         radius: Styling.radius(-4)
-                        color: optionButton.isSelected
-                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
-                            : (optionButton.hovered
-                                ? Qt.rgba(Colors.cyan.r, Colors.cyan.g, Colors.cyan.b, 0.12)
-                                : "transparent")
-                        Behavior on color {
-                            enabled: Config.animDuration > 0
-                            ColorAnimation { duration: 150 }
-                        }
+                        variant: optionButton.isSelected
+                            ? "primary"
+                            : (optionButton.hovered ? "focus" : "transparent")
+                        enableShadow: false
                     }
 
                     contentItem: Item {
@@ -311,9 +340,9 @@ Item {
                             width: parent.width
                             text: optionButton.modelData.label
                             color: optionButton.isSelected
-                                ? Colors.primary
-                                : (optionButton.hovered ? Colors.cyan : Colors.overBackground)
-                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 1.0 : 0.90)
+                                ? optionBg.item
+                                : (optionButton.hovered ? optionBg.item : Colors.overBackground)
+                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 1.0 : 0.75)
                             font.family: Styling.defaultFont
                             font.pixelSize: 13
                             font.bold: optionButton.isSelected
@@ -711,80 +740,36 @@ Item {
                             }
 
                             // Music Folder Button (~/Music)
-                            Button {
+                            HelperButton {
                                 id: headerMusicFolderBtn
-                                Layout.preferredWidth: 32
-                                Layout.preferredHeight: 32
-                                focusPolicy: Qt.NoFocus
+                                implicitWidth: 32
+                                implicitHeight: 32
+                                iconText: "\ue340"
+                                tooltipText: "Open Music Folder (~/Music)"
                                 onClicked: root.openHistoryFolder("~/Music")
-                                background: Rectangle {
-                                    radius: Styling.radius(-4)
-                                    color: headerMusicFolderBtn.hovered
-                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
-                                        : "transparent"
-                                }
-                                contentItem: Text {
-                                    text: "\ue340"
-                                    color: headerMusicFolderBtn.hovered ? Colors.primary : Colors.overBackground
-                                    opacity: headerMusicFolderBtn.hovered ? 1.0 : 0.8
-                                    font.family: Icons.font
-                                    font.pixelSize: 18
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                Accessible.name: "Open Music Folder"
-                                StyledToolTip {
-                                    show: headerMusicFolderBtn.hovered
-                                    tooltipText: "Open Music Folder (~/Music)"
-                                }
                             }
 
                             // Videos Folder Button (~/Videos)
-                            Button {
+                            HelperButton {
                                 id: headerVideoFolderBtn
-                                Layout.preferredWidth: 32
-                                Layout.preferredHeight: 32
-                                focusPolicy: Qt.NoFocus
+                                implicitWidth: 32
+                                implicitHeight: 32
+                                iconText: Icons.recordings
+                                tooltipText: "Open Videos Folder (~/Videos)"
                                 onClicked: root.openHistoryFolder("~/Videos")
-                                background: Rectangle {
-                                    radius: Styling.radius(-4)
-                                    color: headerVideoFolderBtn.hovered
-                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
-                                        : "transparent"
-                                }
-                                contentItem: Text {
-                                    text: Icons.recordings
-                                    color: headerVideoFolderBtn.hovered ? Colors.primary : Colors.overBackground
-                                    opacity: headerVideoFolderBtn.hovered ? 1.0 : 0.8
-                                    font.family: Icons.font
-                                    font.pixelSize: 18
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                Accessible.name: "Open Videos Folder"
-                                StyledToolTip {
-                                    show: headerVideoFolderBtn.hovered
-                                    tooltipText: "Open Videos Folder (~/Videos)"
-                                }
                             }
                         }
 
                         // Row 2: Full-width Searchbar / URL Input
-                        Rectangle {
+                        StyledRect {
                             id: inputContainer
                             Layout.fillWidth: true
                             Layout.preferredHeight: 40
-                            radius: Styling.radius(-3)
-                            color: root.urlRejected
-                                ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
-                                : (inputHover.hovered || urlField.activeFocus
-                                    ? root.cardBgHoverColor
-                                    : root.cardBgColor)
-
-                            Behavior on color {
-                                enabled: Config.animDuration > 0
-                                ColorAnimation { duration: Config.animDuration / 2 }
-                            }
+                            radius: Styling.radius(-4)
+                            variant: root.urlRejected
+                                ? "common"
+                                : (inputHover.hovered || urlField.activeFocus ? "focus" : "internalbg")
+                            enableShadow: false
 
                             HoverHandler {
                                 id: inputHover
@@ -827,110 +812,39 @@ Item {
                                 }
 
                                 // Icon-only Playlist Scope Toggle: shown only when link contains playlist parameter
-                                Button {
+                                HelperButton {
                                     id: inlinePlaylistBtn
                                     visible: root.hasPlaylistParam
-                                    Layout.preferredWidth: 26
-                                    Layout.preferredHeight: 26
-                                    focusPolicy: Qt.NoFocus
-                                    onClicked: YtdService.playlistScope = !YtdService.playlistScope
-                                    background: Rectangle {
-                                        radius: 13
-                                        color: YtdService.playlistScope
-                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.25)
-                                            : (inlinePlaylistBtn.hovered
-                                                ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.16)
-                                                : "transparent")
-                                    }
-                                    contentItem: Text {
-                                        text: YtdService.playlistScope ? Icons.list : Icons.play
-                                        color: YtdService.playlistScope
-                                            ? Colors.primary
-                                            : (inlinePlaylistBtn.hovered ? Colors.primary : Colors.overBackground)
-                                        opacity: YtdService.playlistScope ? 1.0 : (inlinePlaylistBtn.hovered ? 1.0 : 0.85)
-                                        font.family: Icons.font
-                                        font.pixelSize: 15
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                    Accessible.name: YtdService.playlistScope
+                                    implicitWidth: 28
+                                    implicitHeight: 28
+                                    primary: YtdService.playlistScope
+                                    iconText: YtdService.playlistScope ? Icons.list : Icons.play
+                                    tooltipText: YtdService.playlistScope
                                         ? YtdI18n.t("scope_playlist")
                                         : YtdI18n.t("scope_single")
-                                    StyledToolTip {
-                                        show: inlinePlaylistBtn.hovered
-                                        tooltipText: YtdService.playlistScope
-                                            ? YtdI18n.t("scope_playlist")
-                                            : YtdI18n.t("scope_single")
-                                    }
+                                    onClicked: YtdService.playlistScope = !YtdService.playlistScope
                                 }
 
-                                Button {
+                                HelperButton {
                                     id: inlinePasteBtn
                                     visible: urlField.text.length === 0
-                                    Layout.preferredHeight: 28
-                                    leftPadding: 8
-                                    rightPadding: 8
-                                    focusPolicy: Qt.NoFocus
+                                    implicitHeight: 28
+                                    iconText: Icons.clipboard
+                                    labelText: "Paste"
                                     enabled: !YtdService.clipboardBusy
+                                    tooltipText: YtdI18n.t("paste_from_clipboard")
                                     onClicked: YtdService.readClipboard()
-                                    background: Rectangle {
-                                        radius: Styling.radius(-5)
-                                        color: inlinePasteBtn.hovered
-                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22)
-                                            : Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.12)
-                                    }
-                                    contentItem: RowLayout {
-                                        spacing: 4
-                                        Text {
-                                            text: Icons.clipboard
-                                            font.family: Icons.font
-                                            font.pixelSize: 14
-                                            color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
-                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.90
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        Text {
-                                            text: "Paste"
-                                            font.family: Styling.defaultFont
-                                            font.pixelSize: Styling.fontSize(-2)
-                                            font.bold: true
-                                            color: inlinePasteBtn.hovered ? Colors.primary : Colors.overBackground
-                                            opacity: inlinePasteBtn.hovered ? 1.0 : 0.90
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                    }
-                                    Accessible.name: YtdI18n.t("paste_from_clipboard")
-                                    StyledToolTip {
-                                        show: inlinePasteBtn.hovered
-                                        tooltipText: YtdI18n.t("paste_from_clipboard")
-                                    }
                                 }
 
-                                Button {
+                                HelperButton {
                                     id: inlineClearBtn
                                     visible: urlField.text.length > 0
-                                    Layout.preferredWidth: 26
-                                    Layout.preferredHeight: 26
-                                    focusPolicy: Qt.NoFocus
+                                    implicitWidth: 26
+                                    implicitHeight: 26
+                                    danger: true
+                                    iconText: Icons.cancel
+                                    tooltipText: YtdI18n.t("clear_url")
                                     onClicked: urlField.clear()
-                                    background: Rectangle {
-                                        color: inlineClearBtn.hovered ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.2) : "transparent"
-                                        radius: 13
-                                    }
-                                    contentItem: Text {
-                                        text: Icons.cancel
-                                        color: inlineClearBtn.hovered ? Colors.red : Colors.overBackground
-                                        opacity: inlineClearBtn.hovered ? 1.0 : 0.7
-                                        font.family: Icons.font
-                                        font.pixelSize: 16
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                    Accessible.name: YtdI18n.t("clear_url")
-                                    StyledToolTip {
-                                        show: inlineClearBtn.hovered
-                                        tooltipText: YtdI18n.t("clear_url")
-                                    }
                                 }
                             }
                         }
@@ -980,42 +894,16 @@ Item {
                             }
 
                             // Icon-Only Download Action Button
-                            Button {
+                            HelperButton {
                                 id: downloadButton
                                 Layout.preferredWidth: 42
                                 Layout.preferredHeight: 36
-                                focusPolicy: Qt.NoFocus
+                                primary: true
                                 enabled: root.urlFilled && root.urlValid && !YtdService.running
+                                opacity: downloadButton.enabled ? 1.0 : 0.4
+                                iconText: Icons.arrowFatLinesDown
+                                tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
                                 onClicked: root.startDownload()
-                                background: Rectangle {
-                                    radius: Styling.radius(-3)
-                                    color: downloadButton.enabled
-                                        ? (downloadButton.hovered
-                                            ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.32)
-                                            : Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.22))
-                                        : (downloadButton.hovered
-                                            ? root.cardBgHoverColor
-                                            : root.cardBgColor)
-
-                                    Behavior on color {
-                                        enabled: Config.animDuration > 0
-                                        ColorAnimation { duration: 150 }
-                                    }
-                                }
-                                contentItem: Text {
-                                    text: Icons.arrowFatLinesDown
-                                    color: downloadButton.enabled ? Colors.primary : Colors.overBackground
-                                    opacity: downloadButton.enabled ? 1.0 : 0.4
-                                    font.family: Icons.font
-                                    font.pixelSize: 19
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                Accessible.name: YtdI18n.t("download")
-                                StyledToolTip {
-                                    show: downloadButton.hovered
-                                    tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
-                                }
                             }
                         }
 
@@ -1033,11 +921,12 @@ Item {
                             spacing: 6
                             visible: root.activeCardVisible
 
-                            Rectangle {
+                            StyledRect {
                                 Layout.fillWidth: true
                                 implicitHeight: detailsColumn.implicitHeight + 16
-                                radius: Styling.radius(-3)
-                                color: root.cardBgColor
+                                radius: Styling.radius(0)
+                                variant: "common"
+                                enableShadow: false
 
                                 ColumnLayout {
                                     id: detailsColumn
@@ -1053,7 +942,7 @@ Item {
                                             Layout.preferredWidth: 56
                                             Layout.preferredHeight: 56
                                             radius: Styling.radius(-3)
-                                            color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.10)
+                                            color: Colors.outlineVariant
                                             YtdIcon {
                                                 anchors.centerIn: parent
                                                 width: 24
@@ -1150,23 +1039,16 @@ Item {
                                                         font.pixelSize: 12
                                                     }
 
-                                                    Button {
+                                                    HelperButton {
                                                         id: cancelButton
-                                                        Layout.preferredWidth: 26
-                                                        Layout.preferredHeight: 26
+                                                        implicitWidth: 26
+                                                        implicitHeight: 26
                                                         focusPolicy: Qt.NoFocus
                                                         visible: YtdService.running
+                                                        iconText: Icons.cancel
+                                                        danger: true
+                                                        tooltipText: YtdI18n.t("stop_download")
                                                         onClicked: YtdService.cancel()
-                                                        background: Rectangle {
-                                                            radius: Styling.radius(-5)
-                                                            color: cancelButton.hovered ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.18) : "transparent"
-                                                        }
-                                                        contentItem: Text { text: Icons.cancel; color: cancelButton.hovered ? Colors.red : Colors.overBackground; font.family: Icons.font; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                                        Accessible.name: YtdI18n.t("stop_download")
-                                                        StyledToolTip {
-                                                            show: cancelButton.hovered
-                                                            tooltipText: YtdI18n.t("stop_download")
-                                                        }
                                                     }
                                                 }
                                             }
@@ -1203,32 +1085,14 @@ Item {
                             }
                             Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.4 }
 
-                            Button {
+                            HelperButton {
                                 id: clearHistoryButton
-                                Layout.preferredWidth: 26
-                                Layout.preferredHeight: 26
-                                focusPolicy: Qt.NoFocus
+                                implicitWidth: 26
+                                implicitHeight: 26
+                                danger: true
+                                iconText: Icons.trash
+                                tooltipText: YtdI18n.t("clear_history")
                                 onClicked: YtdService.clearHistory()
-                                background: Rectangle {
-                                    radius: Styling.radius(-5)
-                                    color: clearHistoryButton.hovered
-                                        ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.15)
-                                        : "transparent"
-                                }
-                                contentItem: Text {
-                                    text: Icons.trash
-                                    color: clearHistoryButton.hovered ? Colors.red : Colors.overBackground
-                                    opacity: clearHistoryButton.hovered ? 1.0 : 0.6
-                                    font.family: Icons.font
-                                    font.pixelSize: 14
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                Accessible.name: YtdI18n.t("clear_history")
-                                StyledToolTip {
-                                    show: clearHistoryButton.hovered
-                                    tooltipText: YtdI18n.t("clear_history")
-                                }
                             }
                         }
 
@@ -1240,7 +1104,7 @@ Item {
                                 id: historyRepeater
                                 model: YtdService.history
 
-                                delegate: Rectangle {
+                                delegate: StyledRect {
                                     id: historyCard
                                     required property var modelData
 
@@ -1254,127 +1118,133 @@ Item {
                                     }
 
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 56
+                                    implicitHeight: 56
                                     radius: Styling.radius(-3)
-                                    color: (historyCardHover.hovered || (cardClickArea.containsMouse && historyCard.fileExists))
-                                        ? root.cardBgHoverColor
-                                        : root.cardBgColor
-
-                                    Behavior on color {
-                                        enabled: Config.animDuration > 0
-                                        ColorAnimation { duration: 120 }
-                                    }
+                                    enableShadow: false
+                                    variant: historyCard.fileExists && (historyCardHover.hovered || cardClickArea.containsMouse) ? "focus" : "common"
 
                                     HoverHandler {
                                         id: historyCardHover
-                                    }
-
-                                    MouseArea {
-                                        id: cardClickArea
-                                        anchors.left: parent.left
-                                        anchors.top: parent.top
-                                        anchors.bottom: parent.bottom
-                                        anchors.right: actionButtonsRow.left
-                                        cursorShape: historyCard.fileExists ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                        hoverEnabled: true
                                         enabled: historyCard.fileExists
-                                        onClicked: {
-                                            if (historyCard.fileExists && modelData.filename)
-                                                root.playHistoryFile(modelData.filename);
-                                        }
-                                    }
-
-                                    StyledToolTip {
-                                        show: cardClickArea.containsMouse && !openHistoryFolderButton.hovered && !removeHistoryButton.hovered
-                                        tooltipText: historyCard.fileExists
-                                            ? ("Play " + (modelData.title || "media"))
-                                            : ("File not found: " + (modelData.filename || "unknown"))
                                     }
 
                                     RowLayout {
                                         anchors.fill: parent
                                         anchors.margins: 8
-                                        spacing: 10
+                                        spacing: 8
 
-                                        // Left media section (thumbnail + text), dimmed/grayed out if file does not exist
-                                        RowLayout {
+                                        // Left media section with MouseArea for playing
+                                        Item {
+                                            id: mediaClickSection
                                             Layout.fillWidth: true
                                             Layout.fillHeight: true
-                                            spacing: 10
-                                            opacity: historyCard.fileExists ? 1.0 : 0.45
 
-                                            ClippingRectangle {
-                                                Layout.preferredWidth: 40
-                                                Layout.preferredHeight: 40
-                                                radius: Styling.radius(-4)
-                                                color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.10)
-                                                YtdIcon {
-                                                    anchors.centerIn: parent
-                                                    width: 18
-                                                    height: 18
-                                                    iconSize: 18
-                                                    visible: historyThumbnail.status !== Image.Ready || modelData.thumbnail === ""
-                                                }
-                                                Image {
-                                                    id: historyThumbnail
-                                                    anchors.fill: parent
-                                                    source: modelData.thumbnail || ""
-                                                    fillMode: Image.PreserveAspectCrop
-                                                    asynchronous: true
-                                                    smooth: true
-                                                }
-                                                // Play overlay on hover (only for existing playable files)
-                                                Rectangle {
-                                                    anchors.fill: parent
-                                                    color: Qt.rgba(0, 0, 0, 0.45)
-                                                    visible: historyCard.fileExists && cardClickArea.containsMouse
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: Icons.play
-                                                        color: Colors.white
-                                                        font.family: Icons.font
-                                                        font.pixelSize: 16
+                                            MouseArea {
+                                                id: cardClickArea
+                                                anchors.fill: parent
+                                                enabled: historyCard.fileExists
+                                                cursorShape: historyCard.fileExists ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                hoverEnabled: historyCard.fileExists
+                                                onClicked: {
+                                                    if (historyCard.fileExists && modelData.filename) {
+                                                        root.playHistoryFile(modelData.filename);
                                                     }
                                                 }
                                             }
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 3
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.title
-                                                    color: Colors.overBackground
-                                                    font.family: Styling.defaultFont
-                                                    font.pixelSize: Styling.fontSize(-1)
-                                                    font.bold: true
-                                                    elide: Text.ElideRight
-                                                }
-                                                RowLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: 6
+
+                                            StyledToolTip {
+                                                show: cardClickArea.containsMouse && historyCard.fileExists
+                                                tooltipText: "Play " + (modelData.title || "media")
+                                            }
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                spacing: 10
+                                                opacity: historyCard.fileExists ? 1.0 : 0.35
+
+                                                ClippingRectangle {
+                                                    Layout.preferredWidth: 40
+                                                    Layout.preferredHeight: 40
+                                                    radius: Styling.radius(-4)
+                                                    color: Colors.outlineVariant
+
+                                                    YtdIcon {
+                                                        anchors.centerIn: parent
+                                                        width: 18
+                                                        height: 18
+                                                        iconSize: 18
+                                                        visible: historyThumbnail.status !== Image.Ready || modelData.thumbnail === ""
+                                                    }
+
+                                                    Image {
+                                                        id: historyThumbnail
+                                                        anchors.fill: parent
+                                                        source: modelData.thumbnail || ""
+                                                        fillMode: Image.PreserveAspectCrop
+                                                        asynchronous: true
+                                                        smooth: true
+                                                    }
+
+                                                    // Play overlay on hover (only for playable files)
                                                     Rectangle {
-                                                        Layout.preferredHeight: 18
-                                                        Layout.preferredWidth: formatBadgeText.implicitWidth + 8
-                                                        radius: Styling.radius(-5)
-                                                        color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
+                                                        anchors.fill: parent
+                                                        color: Qt.rgba(0, 0, 0, 0.45)
+                                                        visible: historyCard.fileExists && cardClickArea.containsMouse
                                                         Text {
-                                                            id: formatBadgeText
                                                             anchors.centerIn: parent
-                                                            text: modelData.format
-                                                            color: Colors.overBackground
-                                                            font.family: Styling.defaultFont
-                                                            font.pixelSize: 10
-                                                            font.bold: true
+                                                            text: Icons.play
+                                                            color: Colors.white
+                                                            font.family: Icons.font
+                                                            font.pixelSize: 16
                                                         }
                                                     }
+                                                }
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
                                                     Text {
                                                         Layout.fillWidth: true
-                                                        text: (!historyCard.fileExists ? "[Missing] " : "") + (modelData.filename !== "" ? modelData.filename : modelData.url)
-                                                        color: !historyCard.fileExists ? Colors.red : Colors.overBackground
-                                                        opacity: 0.65
+                                                        text: modelData.title
+                                                        color: historyCard.fileExists ? Colors.overBackground : Colors.outline
                                                         font.family: Styling.defaultFont
-                                                        font.pixelSize: 11
-                                                        elide: Text.ElideMiddle
+                                                        font.pixelSize: Styling.fontSize(-1)
+                                                        font.bold: true
+                                                        elide: Text.ElideRight
+                                                    }
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 6
+
+                                                        StyledRect {
+                                                            Layout.preferredHeight: 18
+                                                            Layout.preferredWidth: formatBadgeText.implicitWidth + 8
+                                                            radius: Styling.radius(-5)
+                                                            variant: historyCard.fileExists ? "primary" : "common"
+                                                            enableShadow: false
+
+                                                            Text {
+                                                                id: formatBadgeText
+                                                                anchors.centerIn: parent
+                                                                text: modelData.format
+                                                                color: historyCard.fileExists ? Styling.srItem("primary") : Colors.outline
+                                                                font.family: Styling.defaultFont
+                                                                font.pixelSize: 10
+                                                                font.bold: true
+                                                            }
+                                                        }
+
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: (!historyCard.fileExists ? "[Missing] " : "") + (modelData.filename !== "" ? modelData.filename : modelData.url)
+                                                            color: !historyCard.fileExists ? Colors.red : Colors.overBackground
+                                                            opacity: historyCard.fileExists ? 0.72 : 0.85
+                                                            font.family: Styling.defaultFont
+                                                            font.pixelSize: 11
+                                                            elide: Text.ElideMiddle
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1383,67 +1253,29 @@ Item {
                                         // Right side action buttons
                                         RowLayout {
                                             id: actionButtonsRow
-                                            Layout.preferredWidth: 54
-                                            spacing: 2
-                                            Button {
+                                            Layout.preferredWidth: 58
+                                            spacing: 4
+
+                                            HelperButton {
                                                 id: openHistoryFolderButton
-                                                Layout.preferredWidth: 26
-                                                Layout.preferredHeight: 26
-                                                focusPolicy: Qt.NoFocus
+                                                implicitWidth: 26
+                                                implicitHeight: 26
                                                 enabled: historyCard.fileExists && modelData.filename !== ""
-                                                opacity: enabled ? (hovered ? 1.0 : 0.8) : 0.3
+                                                iconText: Icons.folder
+                                                opacity: enabled ? 1.0 : 0.25
+                                                tooltipText: enabled ? YtdI18n.t("open_folder") : "File not found"
                                                 onClicked: root.openHistoryFolder(modelData.filename)
-                                                background: Rectangle {
-                                                    radius: Styling.radius(-5)
-                                                    color: openHistoryFolderButton.enabled && openHistoryFolderButton.hovered
-                                                        ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
-                                                        : "transparent"
-                                                }
-                                                contentItem: Text {
-                                                    text: Icons.folder
-                                                    color: openHistoryFolderButton.enabled
-                                                        ? (openHistoryFolderButton.hovered ? Colors.primary : Colors.overBackground)
-                                                        : Colors.outline
-                                                    font.family: Icons.font
-                                                    font.pixelSize: 15
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    verticalAlignment: Text.AlignVCenter
-                                                }
-                                                Accessible.name: YtdI18n.t("open_folder")
-                                                StyledToolTip {
-                                                    show: openHistoryFolderButton.hovered
-                                                    tooltipText: openHistoryFolderButton.enabled
-                                                        ? YtdI18n.t("open_folder")
-                                                        : "File not found"
-                                                }
                                             }
-                                            Button {
+
+                                            HelperButton {
                                                 id: removeHistoryButton
-                                                Layout.preferredWidth: 26
-                                                Layout.preferredHeight: 26
-                                                focusPolicy: Qt.NoFocus
+                                                implicitWidth: 26
+                                                implicitHeight: 26
                                                 enabled: true
+                                                danger: true
+                                                iconText: Icons.trash
+                                                tooltipText: YtdI18n.t("remove_from_history")
                                                 onClicked: YtdService.removeHistoryItem(modelData.itemId || modelData.filename || modelData.url)
-                                                background: Rectangle {
-                                                    radius: Styling.radius(-5)
-                                                    color: removeHistoryButton.hovered
-                                                        ? Qt.rgba(Colors.red.r, Colors.red.g, Colors.red.b, 0.18)
-                                                        : "transparent"
-                                                }
-                                                contentItem: Text {
-                                                    text: Icons.trash
-                                                    color: removeHistoryButton.hovered ? Colors.red : Colors.overBackground
-                                                    opacity: removeHistoryButton.hovered ? 1.0 : 0.8
-                                                    font.family: Icons.font
-                                                    font.pixelSize: 15
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    verticalAlignment: Text.AlignVCenter
-                                                }
-                                                Accessible.name: YtdI18n.t("remove_from_history")
-                                                StyledToolTip {
-                                                    show: removeHistoryButton.hovered
-                                                    tooltipText: YtdI18n.t("remove_from_history")
-                                                }
                                             }
                                         }
                                     }
