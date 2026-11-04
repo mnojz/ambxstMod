@@ -48,6 +48,10 @@ Item {
     readonly property color barTrackColor: Colors.background
     readonly property color barProgressColor: Colors.overBackground
 
+    // Phosphor Bold icon glyphs
+    readonly property string iconDownload: "\ue20a"
+    readonly property string iconHistory: "\ue1a0"
+
     // Display labels for the values in YtdService.formats.
     readonly property var formatOptions: [
         { label: "MP3", value: "mp3" },
@@ -167,30 +171,33 @@ Item {
             radius: Styling.radius(-4)
             enableShadow: false
         }
-        contentItem: RowLayout {
-            alignment: Qt.AlignCenter
-            spacing: control.iconText.length > 0 && control.labelText.length > 0 ? 6 : 0
-            Text {
-                visible: control.iconText.length > 0
-                Layout.alignment: Qt.AlignCenter
-                text: control.iconText
-                font.family: Icons.font
-                font.pixelSize: control.labelText.length === 0 ? 18 : 16
-                color: control.danger && control.hovered ? Colors.red : helperButtonBackground.item
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            Text {
-                visible: control.labelText.length > 0
-                Layout.alignment: Qt.AlignCenter
-                text: control.labelText
-                color: control.danger && control.hovered ? Colors.red : helperButtonBackground.item
-                font.family: Styling.defaultFont
-                font.pixelSize: Styling.fontSize(-1)
-                font.bold: control.primary
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+        contentItem: Item {
+            Row {
+                anchors.centerIn: parent
+                spacing: control.iconText.length > 0 && control.labelText.length > 0 ? 6 : 0
+
+                Text {
+                    visible: control.iconText.length > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: control.iconText
+                    font.family: Icons.font
+                    font.pixelSize: control.labelText.length === 0 ? 18 : 16
+                    color: control.danger && control.hovered ? Colors.red : helperButtonBackground.item
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                Text {
+                    visible: control.labelText.length > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: control.labelText
+                    color: control.danger && control.hovered ? Colors.red : helperButtonBackground.item
+                    font.family: Styling.defaultFont
+                    font.pixelSize: Styling.fontSize(-1)
+                    font.bold: control.primary
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
         StyledToolTip {
@@ -289,7 +296,7 @@ Item {
         }
     }
 
-    // Segmented quality/format selector with neutral background and bright tab shades
+    // Segmented quality/format selector with visible background and bright tab shades
     component FormatSelector: StyledRect {
         id: selector
         property var options: []
@@ -299,7 +306,7 @@ Item {
 
         implicitHeight: 34
         radius: Styling.radius(-3)
-        variant: "internalbg"
+        variant: "common"
         enableShadow: false
 
         RowLayout {
@@ -325,18 +332,17 @@ Item {
                     hoverEnabled: true
                     flat: true
 
-                    background: Rectangle {
+                    background: StyledRect {
+                        id: optionBg
                         anchors.fill: parent
                         radius: Styling.radius(-4)
-                        color: optionButton.isSelected
-                            ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.18)
-                            : (optionButton.hovered
-                                ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
-                                : "transparent")
+                        variant: "focus"
+                        opacity: optionButton.down || optionButton.isSelected ? 1.0 : (optionButton.hovered ? 0.55 : 0.0)
+                        enableShadow: false
 
-                        Behavior on color {
+                        Behavior on opacity {
                             enabled: Config.animDuration > 0
-                            ColorAnimation { duration: 120 }
+                            NumberAnimation { duration: 120 }
                         }
                     }
 
@@ -347,7 +353,7 @@ Item {
                             width: parent.width
                             text: optionButton.modelData.label
                             color: Colors.overBackground
-                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 0.90 : 0.60)
+                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 0.92 : 0.65)
                             font.family: Styling.defaultFont
                             font.pixelSize: 12
                             font.bold: optionButton.isSelected
@@ -652,12 +658,18 @@ Item {
             popupY = Math.max(visualMargin, Math.min(popupY, screenHeight - totalHeight - visualMargin));
         }
 
-        // Escape closes the popup from anywhere inside it, not just while the
-        // URL field happens to hold focus.
+        // Escape closes the popup or exits history back to downloader
         Shortcut {
             sequence: "Escape"
             context: Qt.WindowShortcut
-            onActivated: popup.close()
+            onActivated: {
+                if (root.currentView === "history") {
+                    root.currentView = "downloader";
+                    Qt.callLater(() => urlField.forceActiveFocus());
+                } else {
+                    popup.close();
+                }
+            }
         }
 
         // Clicks anywhere outside the popup dismiss it. The bar button sits
@@ -700,6 +712,15 @@ Item {
 
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                     ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+
+                    Connections {
+                        target: root
+                        function onCurrentViewChanged() {
+                            if (popupScroll.contentItem) {
+                                popupScroll.contentItem.contentY = 0;
+                            }
+                        }
+                    }
 
                     Item {
                         id: pagesContainer
@@ -774,7 +795,7 @@ Item {
                                         id: openHistoryBtn
                                         implicitWidth: 32
                                         implicitHeight: 32
-                                        iconText: Icons.arrowCounterClockwise
+                                        iconText: root.iconHistory
                                         tooltipText: YtdI18n.t("downloads")
                                         onClicked: {
                                             root.checkHistoryFiles();
@@ -910,7 +931,7 @@ Item {
                                     primary: true
                                     enabled: root.urlFilled && root.urlValid && !YtdService.running
                                     opacity: downloadButton.enabled ? 1.0 : 0.4
-                                    iconText: Icons.arrowFatLinesDown
+                                    iconText: root.iconDownload
                                     labelText: YtdI18n.t("download")
                                     tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
                                     onClicked: root.startDownload()
@@ -1103,7 +1124,10 @@ Item {
                                         implicitHeight: 32
                                         iconText: Icons.caretLeft
                                         tooltipText: YtdI18n.t("downloader")
-                                        onClicked: root.currentView = "downloader"
+                                        onClicked: {
+                                            root.currentView = "downloader";
+                                            Qt.callLater(() => urlField.forceActiveFocus());
+                                        }
                                     }
 
                                     ColumnLayout {
@@ -1367,8 +1391,8 @@ Item {
         readonly property real screenHeight: root.bar?.screen?.height > 0 ? root.bar.screen.height : 900
         readonly property real screenWidth: root.bar?.screen?.width > 0 ? root.bar.screen.width : 900
         readonly property int availableHeight: Math.max(180, screenHeight - 48)
-        readonly property int maximumContentHeight: root.currentView === "history" ? 340 : 280
-        // Compact width: approximately 80% of former 380px (around 304px - 310px)
+        readonly property int maximumContentHeight: root.currentView === "history" ? 360 : 280
+        // Compact width: approximately 80% of former 400px (~320px)
         contentWidth: Math.max(296, Math.min(320, screenWidth - 48))
         contentHeight: Math.min(availableHeight, Math.min(maximumContentHeight, pagesContainer.implicitHeight + popup.popupPadding * 2))
 
