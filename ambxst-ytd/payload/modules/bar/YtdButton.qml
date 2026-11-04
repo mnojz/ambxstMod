@@ -29,6 +29,7 @@ Item {
     // styling with no popup visible.
     readonly property bool popupOpen: popup.isOpen && popup.visible
     readonly property bool barActive: popupOpen
+    property string currentView: "downloader"
     readonly property bool activeCardVisible: YtdService.state === "starting"
         || YtdService.state === "downloading" || YtdService.state === "error"
         || YtdService.state === "cancelled"
@@ -167,10 +168,11 @@ Item {
             enableShadow: false
         }
         contentItem: RowLayout {
+            alignment: Qt.AlignCenter
             spacing: control.iconText.length > 0 && control.labelText.length > 0 ? 6 : 0
             Text {
                 visible: control.iconText.length > 0
-                Layout.alignment: control.labelText.length === 0 ? Qt.AlignCenter : Qt.AlignVCenter
+                Layout.alignment: Qt.AlignCenter
                 text: control.iconText
                 font.family: Icons.font
                 font.pixelSize: control.labelText.length === 0 ? 18 : 16
@@ -180,7 +182,7 @@ Item {
             }
             Text {
                 visible: control.labelText.length > 0
-                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignCenter
                 text: control.labelText
                 color: control.danger && control.hovered ? Colors.red : helperButtonBackground.item
                 font.family: Styling.defaultFont
@@ -287,7 +289,7 @@ Item {
         }
     }
 
-    // Segmented quality/format selector matching kde-connect-helper styling
+    // Segmented quality/format selector with neutral background and bright tab shades
     component FormatSelector: StyledRect {
         id: selector
         property var options: []
@@ -295,7 +297,7 @@ Item {
         property int padding: 3
         signal selected(int index)
 
-        implicitHeight: 36
+        implicitHeight: 34
         radius: Styling.radius(-3)
         variant: "internalbg"
         enableShadow: false
@@ -303,7 +305,7 @@ Item {
         RowLayout {
             anchors.fill: parent
             anchors.margins: selector.padding
-            spacing: 3
+            spacing: 2
 
             Repeater {
                 id: optionRepeater
@@ -323,14 +325,19 @@ Item {
                     hoverEnabled: true
                     flat: true
 
-                    background: StyledRect {
-                        id: optionBg
+                    background: Rectangle {
                         anchors.fill: parent
                         radius: Styling.radius(-4)
-                        variant: optionButton.isSelected
-                            ? "primary"
-                            : (optionButton.hovered ? "focus" : "transparent")
-                        enableShadow: false
+                        color: optionButton.isSelected
+                            ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.18)
+                            : (optionButton.hovered
+                                ? Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.08)
+                                : "transparent")
+
+                        Behavior on color {
+                            enabled: Config.animDuration > 0
+                            ColorAnimation { duration: 120 }
+                        }
                     }
 
                     contentItem: Item {
@@ -339,12 +346,10 @@ Item {
                             anchors.centerIn: parent
                             width: parent.width
                             text: optionButton.modelData.label
-                            color: optionButton.isSelected
-                                ? optionBg.item
-                                : (optionButton.hovered ? optionBg.item : Colors.overBackground)
-                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 1.0 : 0.75)
+                            color: Colors.overBackground
+                            opacity: optionButton.isSelected ? 1.0 : (optionButton.hovered ? 0.90 : 0.60)
                             font.family: Styling.defaultFont
-                            font.pixelSize: 13
+                            font.pixelSize: 12
                             font.bold: optionButton.isSelected
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -686,596 +691,376 @@ Item {
                 radius: Styling.radius(8)
 
                 ScrollView {
-                    // Anchored inside the styled background rather than placed with
-                    // absolute window coordinates, so the content and the surface
-                    // behind it are always the same rectangle and are shown and hidden
-                    // together.
+                    id: popupScroll
                     anchors.fill: parent
                     anchors.margins: popup.popupPadding
                     contentWidth: availableWidth
-                    contentHeight: card.implicitHeight
+                    contentHeight: pagesContainer.implicitHeight
                     clip: true
 
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                    // No scrollbar gutter. The history list is long, but the
-                    // overflow affordance is not worth a permanent ~10px strip
-                    // on a panel this narrow; the wheel and touchpad still
-                    // scroll the view.
                     ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
-                    ColumnLayout {
-                        id: card
-                        width: parent.width
-                        spacing: 12
+                    Item {
+                        id: pagesContainer
+                        width: popupScroll.availableWidth
+                        implicitHeight: root.currentView === "history"
+                            ? historyColumn.implicitHeight
+                            : downloaderColumn.implicitHeight
+                        clip: true
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
+                        Behavior on implicitHeight {
+                            enabled: Config.animDuration > 0
+                            NumberAnimation { duration: 220; easing.type: Easing.OutQuad }
+                        }
 
-                            YtdIcon {
-                                Layout.preferredWidth: 26
-                                Layout.preferredHeight: 26
-                                iconSize: 26
+                        // PAGE 1: Downloader Page
+                        Item {
+                            id: downloaderPage
+                            width: parent.width
+                            implicitHeight: downloaderColumn.implicitHeight
+                            x: root.currentView === "downloader" ? 0 : -parent.width - 24
+                            opacity: root.currentView === "downloader" ? 1.0 : 0.0
+                            visible: opacity > 0
+
+                            Behavior on x {
+                                enabled: Config.animDuration > 0
+                                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                            }
+                            Behavior on opacity {
+                                enabled: Config.animDuration > 0
+                                NumberAnimation { duration: 180 }
                             }
 
                             ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-                                Text {
-                                    text: YtdI18n.t("app_name")
-                                    color: Colors.overBackground
-                                    font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(1)
-                                    font.bold: true
-                                }
-                                Text {
+                                id: downloaderColumn
+                                width: parent.width
+                                spacing: 10
+
+                                // Top Header Row
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    text: root.statusText()
-                                    color: Colors.overBackground
-                                    opacity: 0.72
-                                    font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(-1)
-                                    elide: Text.ElideRight
-                                }
-                            }
-
-                            // Music Folder Button (~/Music)
-                            HelperButton {
-                                id: headerMusicFolderBtn
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                iconText: "\ue340"
-                                tooltipText: "Open Music Folder (~/Music)"
-                                onClicked: root.openHistoryFolder("~/Music")
-                            }
-
-                            // Videos Folder Button (~/Videos)
-                            HelperButton {
-                                id: headerVideoFolderBtn
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                iconText: Icons.recordings
-                                tooltipText: "Open Videos Folder (~/Videos)"
-                                onClicked: root.openHistoryFolder("~/Videos")
-                            }
-                        }
-
-                        // Row 2: Full-width Searchbar / URL Input
-                        StyledRect {
-                            id: inputContainer
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 40
-                            radius: Styling.radius(-4)
-                            variant: root.urlRejected
-                                ? "common"
-                                : (inputHover.hovered || urlField.activeFocus ? "focus" : "internalbg")
-                            enableShadow: false
-
-                            HoverHandler {
-                                id: inputHover
-                            }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 6
-                                spacing: 8
-
-                                Text {
-                                    text: Icons.link
-                                    font.family: Icons.font
-                                    font.pixelSize: 17
-                                    color: urlField.activeFocus ? Colors.primary : Colors.overBackground
-                                    opacity: urlField.activeFocus ? 1.0 : 0.5
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                TextField {
-                                    id: urlField
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    placeholderText: YtdI18n.t("url_placeholder")
-                                    text: YtdService.url
-                                    selectByMouse: true
-                                    activeFocusOnTab: true
-                                    focus: popup.isOpen
-                                    background: Item {}
-                                    color: Colors.overBackground
-                                    placeholderTextColor: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.45)
-                                    font.family: Styling.defaultFont
-                                    font.pixelSize: Styling.fontSize(0)
-                                    leftPadding: 0
-                                    rightPadding: 0
-                                    verticalAlignment: Text.AlignVCenter
-                                    onAccepted: root.startDownload()
-                                    Keys.onEscapePressed: popup.close()
-                                }
-
-                                // Icon-only Playlist Scope Toggle: shown only when link contains playlist parameter
-                                HelperButton {
-                                    id: inlinePlaylistBtn
-                                    visible: root.hasPlaylistParam
-                                    implicitWidth: 28
-                                    implicitHeight: 28
-                                    primary: YtdService.playlistScope
-                                    iconText: YtdService.playlistScope ? Icons.list : Icons.play
-                                    tooltipText: YtdService.playlistScope
-                                        ? YtdI18n.t("scope_playlist")
-                                        : YtdI18n.t("scope_single")
-                                    onClicked: YtdService.playlistScope = !YtdService.playlistScope
-                                }
-
-                                HelperButton {
-                                    id: inlinePasteBtn
-                                    visible: urlField.text.length === 0
-                                    implicitHeight: 28
-                                    iconText: Icons.clipboard
-                                    labelText: "Paste"
-                                    enabled: !YtdService.clipboardBusy
-                                    tooltipText: YtdI18n.t("paste_from_clipboard")
-                                    onClicked: YtdService.readClipboard()
-                                }
-
-                                HelperButton {
-                                    id: inlineClearBtn
-                                    visible: urlField.text.length > 0
-                                    implicitWidth: 26
-                                    implicitHeight: 26
-                                    danger: true
-                                    iconText: Icons.cancel
-                                    tooltipText: YtdI18n.t("clear_url")
-                                    onClicked: urlField.clear()
-                                }
-                            }
-                        }
-
-                        // Rejection / Error Hint Row
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            visible: root.urlRejected
-                            Text {
-                                text: Icons.alert
-                                font.family: Icons.font
-                                font.pixelSize: 15
-                                color: Colors.red
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                text: root.urlMessage
-                                color: Colors.red
-                                font.family: Styling.defaultFont
-                                font.pixelSize: Styling.fontSize(-1)
-                                font.bold: true
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        // Row 3: Quality Segmented Selector + Icon-Only Download Button
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            FormatSelector {
-                                id: formatSwitch
-                                Layout.fillWidth: true
-                                options: root.formatOptions
-                                currentIndex: root.formatIndex(YtdService.mediaFormat)
-                                onSelected: function(index) {
-                                    YtdService.mediaFormat = root.formatOptions[index].value;
-                                }
-
-                                Connections {
-                                    target: YtdService
-                                    function onMediaFormatChanged() {
-                                        formatSwitch.currentIndex = root.formatIndex(YtdService.mediaFormat);
-                                    }
-                                }
-                            }
-
-                            // Icon-Only Download Action Button
-                            HelperButton {
-                                id: downloadButton
-                                Layout.preferredWidth: 42
-                                Layout.preferredHeight: 36
-                                primary: true
-                                enabled: root.urlFilled && root.urlValid && !YtdService.running
-                                opacity: downloadButton.enabled ? 1.0 : 0.4
-                                iconText: Icons.arrowFatLinesDown
-                                tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
-                                onClicked: root.startDownload()
-                            }
-                        }
-
-                        Connections {
-                            target: YtdService
-                            function onClipboardTextChanged() {
-                                if (YtdService.clipboardText !== "")
-                                    urlField.text = YtdService.clipboardText;
-                            }
-                        }
-
-                        // Active download / last result, shown above the history.
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            visible: root.activeCardVisible
-
-                            StyledRect {
-                                Layout.fillWidth: true
-                                implicitHeight: detailsColumn.implicitHeight + 16
-                                radius: Styling.radius(0)
-                                variant: "common"
-                                enableShadow: false
-
-                                ColumnLayout {
-                                    id: detailsColumn
-                                    anchors.fill: parent
-                                    anchors.margins: 10
                                     spacing: 8
 
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 10
+                                    YtdIcon {
+                                        Layout.preferredWidth: 24
+                                        Layout.preferredHeight: 24
+                                        iconSize: 24
+                                    }
 
-                                        ClippingRectangle {
-                                            Layout.preferredWidth: 56
-                                            Layout.preferredHeight: 56
-                                            radius: Styling.radius(-3)
-                                            color: Colors.outlineVariant
-                                            YtdIcon {
-                                                anchors.centerIn: parent
-                                                width: 24
-                                                height: 24
-                                                iconSize: 24
-                                                visible: thumbnailImage.status !== Image.Ready || YtdService.thumbnail === ""
-                                            }
-                                            Image {
-                                                id: thumbnailImage
-                                                anchors.fill: parent
-                                                source: YtdService.thumbnail
-                                                fillMode: Image.PreserveAspectCrop
-                                                asynchronous: true
-                                                smooth: true
-                                            }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+                                        Text {
+                                            text: YtdI18n.t("app_name")
+                                            color: Colors.overBackground
+                                            font.family: Styling.defaultFont
+                                            font.pixelSize: Styling.fontSize(1)
+                                            font.bold: true
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.statusText()
+                                            color: Colors.overBackground
+                                            opacity: 0.72
+                                            font.family: Styling.defaultFont
+                                            font.pixelSize: Styling.fontSize(-1)
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    // History Button at Top Right Corner
+                                    HelperButton {
+                                        id: openHistoryBtn
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        iconText: Icons.arrowCounterClockwise
+                                        tooltipText: YtdI18n.t("downloads")
+                                        onClicked: {
+                                            root.checkHistoryFiles();
+                                            root.currentView = "history";
+                                        }
+                                    }
+                                }
+
+                                // Searchbar / URL Input (No paste button)
+                                StyledRect {
+                                    id: inputContainer
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 38
+                                    radius: Styling.radius(-4)
+                                    variant: root.urlRejected
+                                        ? "common"
+                                        : (inputHover.hovered || urlField.activeFocus ? "focus" : "internalbg")
+                                    enableShadow: false
+
+                                    HoverHandler {
+                                        id: inputHover
+                                    }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 6
+                                        spacing: 8
+
+                                        Text {
+                                            text: Icons.link
+                                            font.family: Icons.font
+                                            font.pixelSize: 16
+                                            color: urlField.activeFocus ? Colors.primary : Colors.overBackground
+                                            opacity: urlField.activeFocus ? 1.0 : 0.5
+                                            verticalAlignment: Text.AlignVCenter
                                         }
 
-                                        ColumnLayout {
+                                        TextField {
+                                            id: urlField
                                             Layout.fillWidth: true
-                                            spacing: 4
+                                            Layout.fillHeight: true
+                                            placeholderText: YtdI18n.t("url_placeholder")
+                                            text: YtdService.url
+                                            selectByMouse: true
+                                            activeFocusOnTab: true
+                                            focus: popup.isOpen && root.currentView === "downloader"
+                                            background: Item {}
+                                            color: Colors.overBackground
+                                            placeholderTextColor: Qt.rgba(Colors.overBackground.r, Colors.overBackground.g, Colors.overBackground.b, 0.45)
+                                            font.family: Styling.defaultFont
+                                            font.pixelSize: Styling.fontSize(-1)
+                                            leftPadding: 0
+                                            rightPadding: 0
+                                            verticalAlignment: Text.AlignVCenter
+                                            onAccepted: root.startDownload()
+                                            Keys.onEscapePressed: popup.close()
+                                        }
 
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: YtdService.title !== "" ? YtdService.title : root.statusText()
-                                                color: Colors.overBackground
-                                                font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(0)
-                                                font.bold: true
-                                                elide: Text.ElideMiddle
-                                            }
+                                        // Icon-only Playlist Scope Toggle
+                                        HelperButton {
+                                            id: inlinePlaylistBtn
+                                            visible: root.hasPlaylistParam
+                                            implicitWidth: 26
+                                            implicitHeight: 26
+                                            primary: YtdService.playlistScope
+                                            iconText: YtdService.playlistScope ? Icons.list : Icons.play
+                                            tooltipText: YtdService.playlistScope
+                                                ? YtdI18n.t("scope_playlist")
+                                                : YtdI18n.t("scope_single")
+                                            onClicked: YtdService.playlistScope = !YtdService.playlistScope
+                                        }
 
-                                            Text {
-                                                Layout.fillWidth: true
-                                                visible: YtdService.filename !== ""
-                                                text: YtdService.filename
-                                                color: Colors.overBackground
-                                                opacity: 0.72
-                                                font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(-1)
-                                                elide: Text.ElideMiddle
+                                        // Clear input button
+                                        HelperButton {
+                                            id: inlineClearBtn
+                                            visible: urlField.text.length > 0
+                                            implicitWidth: 26
+                                            implicitHeight: 26
+                                            danger: true
+                                            iconText: Icons.cancel
+                                            tooltipText: YtdI18n.t("clear_url")
+                                            onClicked: urlField.clear()
+                                        }
+                                    }
+                                }
+
+                                // Rejection / Error Hint Row
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    visible: root.urlRejected
+                                    Text {
+                                        text: Icons.alert
+                                        font.family: Icons.font
+                                        font.pixelSize: 15
+                                        color: Colors.red
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.urlMessage
+                                        color: Colors.red
+                                        font.family: Styling.defaultFont
+                                        font.pixelSize: Styling.fontSize(-1)
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                // Row: Quality Segmented Selector (Full Width)
+                                FormatSelector {
+                                    id: formatSwitch
+                                    Layout.fillWidth: true
+                                    options: root.formatOptions
+                                    currentIndex: root.formatIndex(YtdService.mediaFormat)
+                                    onSelected: function(index) {
+                                        YtdService.mediaFormat = root.formatOptions[index].value;
+                                    }
+
+                                    Connections {
+                                        target: YtdService
+                                        function onMediaFormatChanged() {
+                                            formatSwitch.currentIndex = root.formatIndex(YtdService.mediaFormat);
+                                        }
+                                    }
+                                }
+
+                                // Row: Full-width Download Button right below Quality Bar
+                                HelperButton {
+                                    id: downloadButton
+                                    Layout.fillWidth: true
+                                    implicitHeight: 36
+                                    primary: true
+                                    enabled: root.urlFilled && root.urlValid && !YtdService.running
+                                    opacity: downloadButton.enabled ? 1.0 : 0.4
+                                    iconText: Icons.arrowFatLinesDown
+                                    labelText: YtdI18n.t("download")
+                                    tooltipText: downloadButton.enabled ? YtdI18n.t("download") : YtdI18n.t("invalid_url")
+                                    onClicked: root.startDownload()
+                                }
+
+                                // Active download card (shown while downloading or on error)
+                                StyledRect {
+                                    id: activeCardRect
+                                    Layout.fillWidth: true
+                                    implicitHeight: detailsColumn.implicitHeight + 16
+                                    radius: Styling.radius(0)
+                                    variant: "common"
+                                    enableShadow: false
+                                    visible: root.activeCardVisible
+
+                                    ColumnLayout {
+                                        id: detailsColumn
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 8
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 10
+
+                                            ClippingRectangle {
+                                                Layout.preferredWidth: 50
+                                                Layout.preferredHeight: 50
+                                                radius: Styling.radius(-3)
+                                                color: Colors.outlineVariant
+                                                YtdIcon {
+                                                    anchors.centerIn: parent
+                                                    width: 22
+                                                    height: 22
+                                                    iconSize: 22
+                                                    visible: thumbnailImage.status !== Image.Ready || YtdService.thumbnail === ""
+                                                }
+                                                Image {
+                                                    id: thumbnailImage
+                                                    anchors.fill: parent
+                                                    source: YtdService.thumbnail
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    asynchronous: true
+                                                    smooth: true
+                                                }
                                             }
 
                                             ColumnLayout {
                                                 Layout.fillWidth: true
                                                 spacing: 4
-                                                visible: YtdService.state === "starting" || YtdService.state === "downloading"
 
-                                                Rectangle {
+                                                Text {
                                                     Layout.fillWidth: true
-                                                    height: 6
-                                                    radius: 3
-                                                    color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
-                                                    Rectangle {
-                                                        width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
-                                                        height: parent.height
-                                                        radius: 3
-                                                        color: Colors.primary
-                                                        Behavior on width {
-                                                            enabled: Config.animDuration > 0
-                                                            NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
-                                                        }
-                                                    }
+                                                    text: YtdService.title !== "" ? YtdService.title : root.statusText()
+                                                    color: Colors.overBackground
+                                                    font.family: Styling.defaultFont
+                                                    font.pixelSize: Styling.fontSize(0)
+                                                    font.bold: true
+                                                    elide: Text.ElideMiddle
                                                 }
 
-                                                RowLayout {
+                                                Text {
                                                     Layout.fillWidth: true
-                                                    spacing: 4
-
-                                                    Text {
-                                                        text: (YtdService.itemCount > 0 ? YtdService.completedCount + "/" + YtdService.itemCount + " · " : "") + Math.round(YtdService.progress) + "%"
-                                                        color: Colors.primary
-                                                        font.family: Styling.defaultFont
-                                                        font.pixelSize: 13
-                                                        font.bold: true
-                                                    }
-
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: YtdService.formatBytes(YtdService.downloaded) + (YtdService.total > 0 ? " / " + YtdService.formatBytes(YtdService.total) : "")
-                                                        color: Colors.overBackground
-                                                        opacity: 0.8
-                                                        font.family: Styling.defaultFont
-                                                        font.pixelSize: 12
-                                                        horizontalAlignment: Text.AlignRight
-                                                        elide: Text.ElideRight
-                                                    }
-
-                                                    Text {
-                                                        visible: YtdService.speed > 0
-                                                        text: YtdService.formatSpeed(YtdService.speed)
-                                                        color: Colors.overBackground
-                                                        opacity: 0.8
-                                                        font.family: Styling.defaultFont
-                                                        font.pixelSize: 12
-                                                    }
-
-                                                    HelperButton {
-                                                        id: cancelButton
-                                                        implicitWidth: 26
-                                                        implicitHeight: 26
-                                                        focusPolicy: Qt.NoFocus
-                                                        visible: YtdService.running
-                                                        iconText: Icons.cancel
-                                                        danger: true
-                                                        tooltipText: YtdI18n.t("stop_download")
-                                                        onClicked: YtdService.cancel()
-                                                    }
-                                                }
-                                            }
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                visible: YtdService.message !== "" && (YtdService.state === "error" || YtdService.state === "cancelled")
-                                                text: YtdService.message
-                                                color: YtdService.state === "error" ? Colors.red : Colors.overBackground
-                                                opacity: YtdService.state === "error" ? 1.0 : 0.75
-                                                font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(-1)
-                                                elide: Text.ElideRight
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            visible: root.historyVisible
-                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.4 }
-                            Text {
-                                text: YtdI18n.t("downloads").toUpperCase()
-                                color: Colors.overBackground
-                                opacity: 0.55
-                                font.family: Styling.defaultFont
-                                font.pixelSize: 11
-                                font.bold: true
-                                font.letterSpacing: 0.5
-                            }
-                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBright; opacity: 0.4 }
-
-                            HelperButton {
-                                id: clearHistoryButton
-                                implicitWidth: 26
-                                implicitHeight: 26
-                                danger: true
-                                iconText: Icons.trash
-                                tooltipText: YtdI18n.t("clear_history")
-                                onClicked: YtdService.clearHistory()
-                            }
-                        }
-
-                        ColumnLayout {
-                            visible: root.historyVisible
-                            Layout.fillWidth: true
-                            spacing: 6
-                            Repeater {
-                                id: historyRepeater
-                                model: YtdService.history
-
-                                delegate: StyledRect {
-                                    id: historyCard
-                                    required property var modelData
-
-                                    readonly property bool fileExists: {
-                                        var fn = modelData.filename || "";
-                                        if (fn === "")
-                                            return false;
-                                        if (root.existingFiles.hasOwnProperty(fn))
-                                            return !!root.existingFiles[fn];
-                                        return true;
-                                    }
-
-                                    Layout.fillWidth: true
-                                    implicitHeight: 56
-                                    radius: Styling.radius(-3)
-                                    enableShadow: false
-                                    variant: historyCard.fileExists && (historyCardHover.hovered || cardClickArea.containsMouse) ? "focus" : "common"
-
-                                    HoverHandler {
-                                        id: historyCardHover
-                                        enabled: historyCard.fileExists
-                                    }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.margins: 8
-                                        spacing: 8
-
-                                        // Left media section with MouseArea for playing
-                                        Item {
-                                            id: mediaClickSection
-                                            Layout.fillWidth: true
-                                            Layout.fillHeight: true
-
-                                            MouseArea {
-                                                id: cardClickArea
-                                                anchors.fill: parent
-                                                enabled: historyCard.fileExists
-                                                cursorShape: historyCard.fileExists ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                hoverEnabled: historyCard.fileExists
-                                                onClicked: {
-                                                    if (historyCard.fileExists && modelData.filename) {
-                                                        root.playHistoryFile(modelData.filename);
-                                                    }
-                                                }
-                                            }
-
-                                            StyledToolTip {
-                                                show: cardClickArea.containsMouse && historyCard.fileExists
-                                                tooltipText: "Play " + (modelData.title || "media")
-                                            }
-
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                spacing: 10
-                                                opacity: historyCard.fileExists ? 1.0 : 0.35
-
-                                                ClippingRectangle {
-                                                    Layout.preferredWidth: 40
-                                                    Layout.preferredHeight: 40
-                                                    radius: Styling.radius(-4)
-                                                    color: Colors.outlineVariant
-
-                                                    YtdIcon {
-                                                        anchors.centerIn: parent
-                                                        width: 18
-                                                        height: 18
-                                                        iconSize: 18
-                                                        visible: historyThumbnail.status !== Image.Ready || modelData.thumbnail === ""
-                                                    }
-
-                                                    Image {
-                                                        id: historyThumbnail
-                                                        anchors.fill: parent
-                                                        source: modelData.thumbnail || ""
-                                                        fillMode: Image.PreserveAspectCrop
-                                                        asynchronous: true
-                                                        smooth: true
-                                                    }
-
-                                                    // Play overlay on hover (only for playable files)
-                                                    Rectangle {
-                                                        anchors.fill: parent
-                                                        color: Qt.rgba(0, 0, 0, 0.45)
-                                                        visible: historyCard.fileExists && cardClickArea.containsMouse
-                                                        Text {
-                                                            anchors.centerIn: parent
-                                                            text: Icons.play
-                                                            color: Colors.white
-                                                            font.family: Icons.font
-                                                            font.pixelSize: 16
-                                                        }
-                                                    }
+                                                    visible: YtdService.filename !== ""
+                                                    text: YtdService.filename
+                                                    color: Colors.overBackground
+                                                    opacity: 0.72
+                                                    font.family: Styling.defaultFont
+                                                    font.pixelSize: Styling.fontSize(-1)
+                                                    elide: Text.ElideMiddle
                                                 }
 
                                                 ColumnLayout {
                                                     Layout.fillWidth: true
-                                                    spacing: 2
+                                                    spacing: 4
+                                                    visible: YtdService.state === "starting" || YtdService.state === "downloading"
 
-                                                    Text {
+                                                    Rectangle {
                                                         Layout.fillWidth: true
-                                                        text: modelData.title
-                                                        color: historyCard.fileExists ? Colors.overBackground : Colors.outline
-                                                        font.family: Styling.defaultFont
-                                                        font.pixelSize: Styling.fontSize(-1)
-                                                        font.bold: true
-                                                        elide: Text.ElideRight
+                                                        height: 5
+                                                        radius: 2.5
+                                                        color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
+                                                        Rectangle {
+                                                            width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
+                                                            height: parent.height
+                                                            radius: 2.5
+                                                            color: Colors.primary
+                                                            Behavior on width {
+                                                                enabled: Config.animDuration > 0
+                                                                NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
+                                                            }
+                                                        }
                                                     }
 
                                                     RowLayout {
                                                         Layout.fillWidth: true
-                                                        spacing: 6
+                                                        spacing: 4
 
-                                                        StyledRect {
-                                                            Layout.preferredHeight: 18
-                                                            Layout.preferredWidth: formatBadgeText.implicitWidth + 8
-                                                            radius: Styling.radius(-5)
-                                                            variant: historyCard.fileExists ? "primary" : "common"
-                                                            enableShadow: false
-
-                                                            Text {
-                                                                id: formatBadgeText
-                                                                anchors.centerIn: parent
-                                                                text: modelData.format
-                                                                color: historyCard.fileExists ? Styling.srItem("primary") : Colors.outline
-                                                                font.family: Styling.defaultFont
-                                                                font.pixelSize: 10
-                                                                font.bold: true
-                                                            }
+                                                        Text {
+                                                            text: (YtdService.itemCount > 0 ? YtdService.completedCount + "/" + YtdService.itemCount + " · " : "") + Math.round(YtdService.progress) + "%"
+                                                            color: Colors.primary
+                                                            font.family: Styling.defaultFont
+                                                            font.pixelSize: 12
+                                                            font.bold: true
                                                         }
 
                                                         Text {
                                                             Layout.fillWidth: true
-                                                            text: (!historyCard.fileExists ? "[Missing] " : "") + (modelData.filename !== "" ? modelData.filename : modelData.url)
-                                                            color: !historyCard.fileExists ? Colors.red : Colors.overBackground
-                                                            opacity: historyCard.fileExists ? 0.72 : 0.85
+                                                            text: YtdService.formatBytes(YtdService.downloaded) + (YtdService.total > 0 ? " / " + YtdService.formatBytes(YtdService.total) : "")
+                                                            color: Colors.overBackground
+                                                            opacity: 0.8
                                                             font.family: Styling.defaultFont
                                                             font.pixelSize: 11
-                                                            elide: Text.ElideMiddle
+                                                            horizontalAlignment: Text.AlignRight
+                                                            elide: Text.ElideRight
+                                                        }
+
+                                                        Text {
+                                                            visible: YtdService.speed > 0
+                                                            text: YtdService.formatSpeed(YtdService.speed)
+                                                            color: Colors.overBackground
+                                                            opacity: 0.8
+                                                            font.family: Styling.defaultFont
+                                                            font.pixelSize: 11
+                                                        }
+
+                                                        HelperButton {
+                                                            id: cancelButton
+                                                            implicitWidth: 26
+                                                            implicitHeight: 26
+                                                            focusPolicy: Qt.NoFocus
+                                                            visible: YtdService.running
+                                                            iconText: Icons.cancel
+                                                            danger: true
+                                                            tooltipText: YtdI18n.t("stop_download")
+                                                            onClicked: YtdService.cancel()
                                                         }
                                                     }
                                                 }
-                                            }
-                                        }
 
-                                        // Right side action buttons
-                                        RowLayout {
-                                            id: actionButtonsRow
-                                            Layout.preferredWidth: 58
-                                            spacing: 4
-
-                                            HelperButton {
-                                                id: openHistoryFolderButton
-                                                implicitWidth: 26
-                                                implicitHeight: 26
-                                                enabled: historyCard.fileExists && modelData.filename !== ""
-                                                iconText: Icons.folder
-                                                opacity: enabled ? 1.0 : 0.25
-                                                tooltipText: enabled ? YtdI18n.t("open_folder") : "File not found"
-                                                onClicked: root.openHistoryFolder(modelData.filename)
-                                            }
-
-                                            HelperButton {
-                                                id: removeHistoryButton
-                                                implicitWidth: 26
-                                                implicitHeight: 26
-                                                enabled: true
-                                                danger: true
-                                                iconText: Icons.trash
-                                                tooltipText: YtdI18n.t("remove_from_history")
-                                                onClicked: YtdService.removeHistoryItem(modelData.itemId || modelData.filename || modelData.url)
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    visible: YtdService.message !== "" && (YtdService.state === "error" || YtdService.state === "cancelled")
+                                                    text: YtdService.message
+                                                    color: YtdService.state === "error" ? Colors.red : Colors.overBackground
+                                                    opacity: YtdService.state === "error" ? 1.0 : 0.75
+                                                    font.family: Styling.defaultFont
+                                                    font.pixelSize: Styling.fontSize(-1)
+                                                    elide: Text.ElideRight
+                                                }
                                             }
                                         }
                                     }
@@ -1283,6 +1068,297 @@ Item {
                             }
                         }
 
+                        // PAGE 2: Download History Page (slides in)
+                        Item {
+                            id: historyPage
+                            width: parent.width
+                            implicitHeight: historyColumn.implicitHeight
+                            x: root.currentView === "history" ? 0 : parent.width + 24
+                            opacity: root.currentView === "history" ? 1.0 : 0.0
+                            visible: opacity > 0
+
+                            Behavior on x {
+                                enabled: Config.animDuration > 0
+                                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                            }
+                            Behavior on opacity {
+                                enabled: Config.animDuration > 0
+                                NumberAnimation { duration: 180 }
+                            }
+
+                            ColumnLayout {
+                                id: historyColumn
+                                width: parent.width
+                                spacing: 10
+
+                                // History Header Row with Exit Button on Left
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    // Button at top left corner to exit to downloader
+                                    HelperButton {
+                                        id: exitHistoryBtn
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        iconText: Icons.caretLeft
+                                        tooltipText: YtdI18n.t("downloader")
+                                        onClicked: root.currentView = "downloader"
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+                                        Text {
+                                            text: YtdI18n.t("downloads")
+                                            color: Colors.overBackground
+                                            font.family: Styling.defaultFont
+                                            font.pixelSize: Styling.fontSize(1)
+                                            font.bold: true
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: YtdService.history.length > 0
+                                                ? YtdI18n.t("downloaded_count").replace("%1", YtdService.history.length)
+                                                : "No downloads yet"
+                                            color: Colors.overBackground
+                                            opacity: 0.72
+                                            font.family: Styling.defaultFont
+                                            font.pixelSize: Styling.fontSize(-1)
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    // Clear History Button at top right
+                                    HelperButton {
+                                        id: clearHistoryButton
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        visible: YtdService.history.length > 0
+                                        danger: true
+                                        iconText: Icons.trash
+                                        tooltipText: YtdI18n.t("clear_history")
+                                        onClicked: YtdService.clearHistory()
+                                    }
+                                }
+
+                                // Empty state
+                                Item {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 120
+                                    visible: YtdService.history.length === 0
+
+                                    ColumnLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 6
+                                        Text {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: Icons.folder
+                                            font.family: Icons.font
+                                            font.pixelSize: 28
+                                            color: Colors.outline
+                                        }
+                                        Text {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: "No downloads yet"
+                                            color: Colors.overBackground
+                                            opacity: 0.55
+                                            font.family: Styling.defaultFont
+                                            font.pixelSize: Styling.fontSize(-1)
+                                        }
+                                    }
+                                }
+
+                                // History Items List
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    visible: YtdService.history.length > 0
+
+                                    Repeater {
+                                        id: historyRepeater
+                                        model: YtdService.history
+
+                                        delegate: StyledRect {
+                                            id: historyCard
+                                            required property var modelData
+
+                                            readonly property bool fileExists: {
+                                                var fn = modelData.filename || "";
+                                                if (fn === "")
+                                                    return false;
+                                                if (root.existingFiles.hasOwnProperty(fn))
+                                                    return !!root.existingFiles[fn];
+                                                return true;
+                                            }
+
+                                            Layout.fillWidth: true
+                                            implicitHeight: 56
+                                            radius: Styling.radius(-3)
+                                            enableShadow: false
+                                            variant: historyCard.fileExists && (historyCardHover.hovered || cardClickArea.containsMouse) ? "focus" : "common"
+
+                                            HoverHandler {
+                                                id: historyCardHover
+                                                enabled: historyCard.fileExists
+                                            }
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 8
+                                                spacing: 8
+
+                                                // Left media section with MouseArea for playing
+                                                Item {
+                                                    id: mediaClickSection
+                                                    Layout.fillWidth: true
+                                                    Layout.fillHeight: true
+
+                                                    MouseArea {
+                                                        id: cardClickArea
+                                                        anchors.fill: parent
+                                                        enabled: historyCard.fileExists
+                                                        cursorShape: historyCard.fileExists ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                        hoverEnabled: historyCard.fileExists
+                                                        onClicked: {
+                                                            if (historyCard.fileExists && modelData.filename) {
+                                                                root.playHistoryFile(modelData.filename);
+                                                            }
+                                                        }
+                                                    }
+
+                                                    StyledToolTip {
+                                                        show: cardClickArea.containsMouse && historyCard.fileExists
+                                                        tooltipText: "Play " + (modelData.title || "media")
+                                                    }
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        spacing: 8
+                                                        opacity: historyCard.fileExists ? 1.0 : 0.35
+
+                                                        ClippingRectangle {
+                                                            Layout.preferredWidth: 38
+                                                            Layout.preferredHeight: 38
+                                                            radius: Styling.radius(-4)
+                                                            color: Colors.outlineVariant
+
+                                                            YtdIcon {
+                                                                anchors.centerIn: parent
+                                                                width: 18
+                                                                height: 18
+                                                                iconSize: 18
+                                                                visible: historyThumbnail.status !== Image.Ready || modelData.thumbnail === ""
+                                                            }
+
+                                                            Image {
+                                                                id: historyThumbnail
+                                                                anchors.fill: parent
+                                                                source: modelData.thumbnail || ""
+                                                                fillMode: Image.PreserveAspectCrop
+                                                                asynchronous: true
+                                                                smooth: true
+                                                            }
+
+                                                            // Play overlay on hover (only for playable files)
+                                                            Rectangle {
+                                                                anchors.fill: parent
+                                                                color: Qt.rgba(0, 0, 0, 0.45)
+                                                                visible: historyCard.fileExists && cardClickArea.containsMouse
+                                                                Text {
+                                                                    anchors.centerIn: parent
+                                                                    text: Icons.play
+                                                                    color: Colors.white
+                                                                    font.family: Icons.font
+                                                                    font.pixelSize: 16
+                                                                }
+                                                            }
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 2
+
+                                                            Text {
+                                                                Layout.fillWidth: true
+                                                                text: modelData.title
+                                                                color: historyCard.fileExists ? Colors.overBackground : Colors.outline
+                                                                font.family: Styling.defaultFont
+                                                                font.pixelSize: Styling.fontSize(-1)
+                                                                font.bold: true
+                                                                elide: Text.ElideRight
+                                                            }
+
+                                                            RowLayout {
+                                                                Layout.fillWidth: true
+                                                                spacing: 4
+
+                                                                StyledRect {
+                                                                    Layout.preferredHeight: 18
+                                                                    Layout.preferredWidth: formatBadgeText.implicitWidth + 8
+                                                                    radius: Styling.radius(-5)
+                                                                    variant: historyCard.fileExists ? "primary" : "common"
+                                                                    enableShadow: false
+
+                                                                    Text {
+                                                                        id: formatBadgeText
+                                                                        anchors.centerIn: parent
+                                                                        text: modelData.format
+                                                                        color: historyCard.fileExists ? Styling.srItem("primary") : Colors.outline
+                                                                        font.family: Styling.defaultFont
+                                                                        font.pixelSize: 10
+                                                                        font.bold: true
+                                                                    }
+                                                                }
+
+                                                                Text {
+                                                                    Layout.fillWidth: true
+                                                                    text: (!historyCard.fileExists ? "[Missing] " : "") + (modelData.filename !== "" ? modelData.filename : modelData.url)
+                                                                    color: !historyCard.fileExists ? Colors.red : Colors.overBackground
+                                                                    opacity: historyCard.fileExists ? 0.72 : 0.85
+                                                                    font.family: Styling.defaultFont
+                                                                    font.pixelSize: 11
+                                                                    elide: Text.ElideMiddle
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Right side action buttons
+                                                RowLayout {
+                                                    id: actionButtonsRow
+                                                    Layout.preferredWidth: 56
+                                                    spacing: 4
+
+                                                    HelperButton {
+                                                        id: openHistoryFolderButton
+                                                        implicitWidth: 26
+                                                        implicitHeight: 26
+                                                        enabled: historyCard.fileExists && modelData.filename !== ""
+                                                        iconText: Icons.folder
+                                                        opacity: enabled ? 1.0 : 0.25
+                                                        tooltipText: enabled ? YtdI18n.t("open_folder") : "File not found"
+                                                        onClicked: root.openHistoryFolder(modelData.filename)
+                                                    }
+
+                                                    HelperButton {
+                                                        id: removeHistoryButton
+                                                        implicitWidth: 26
+                                                        implicitHeight: 26
+                                                        enabled: true
+                                                        danger: true
+                                                        iconText: Icons.trash
+                                                        tooltipText: YtdI18n.t("remove_from_history")
+                                                        onClicked: YtdService.removeHistoryItem(modelData.itemId || modelData.filename || modelData.url)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1290,43 +1366,29 @@ Item {
 
         readonly property real screenHeight: root.bar?.screen?.height > 0 ? root.bar.screen.height : 900
         readonly property real screenWidth: root.bar?.screen?.width > 0 ? root.bar.screen.width : 900
-        // One page scrolls as a single unit: header, URL field, format
-        // selector, the active card, and every history card. Tweak this
-        // value to change the popup viewport height.
         readonly property int availableHeight: Math.max(180, screenHeight - 48)
-        readonly property int maximumContentHeight: 272
-        // The format row is fixed width: FormatSelector sizes itself from its
-        // chips and the scope toggle adds 44px, so ~350px of content is the
-        // point below which the selector row starts to clip. 404 keeps roughly
-        // 30px of breathing room once the padding is taken off.
-        contentWidth: Math.max(372, Math.min(404, screenWidth - 72))
-        contentHeight: Math.min(availableHeight, Math.min(maximumContentHeight, card.implicitHeight + popup.popupPadding * 2))
+        readonly property int maximumContentHeight: root.currentView === "history" ? 340 : 280
+        // Compact width: approximately 80% of former 380px (around 304px - 310px)
+        contentWidth: Math.max(296, Math.min(320, screenWidth - 48))
+        contentHeight: Math.min(availableHeight, Math.min(maximumContentHeight, pagesContainer.implicitHeight + popup.popupPadding * 2))
 
         function open() {
             if (visible)
                 return;
 
+            root.currentView = "downloader";
             isOpen = true;
             root.checkHistoryFiles();
-            // Measure the button now, while it is at its real on-screen
-            // position, instead of relying on a load-time value.
             reposition();
             visible = true;
 
-            // The window needs to be mapped before an item inside it can take
-            // active focus, otherwise the keystrokes go nowhere.
             Qt.callLater(() => urlField.forceActiveFocus());
         }
 
         function close() {
-            // Always clear the logical flag, even when the surface is already
-            // hidden. Skipping it here would leave the button stuck in its
-            // active state with no popup showing.
             isOpen = false;
-            // Hide immediately. Unmapping is what tears the surface down in
-            // one step; a fade on a full-screen layer surface left the
-            // background and its content visibly unwinding separately.
             visible = false;
+            root.currentView = "downloader";
         }
 
         function toggle() {
