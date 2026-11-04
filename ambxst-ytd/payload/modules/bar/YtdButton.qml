@@ -118,20 +118,50 @@ Item {
         return readyText + queuedSuffix();
     }
 
-    function openHistoryFolder(path) {
-        var filename = String(path || "");
+    property var existingFiles: ({})
+    property bool checkPending: false
+
+    function executeDetached(targetPath, isDir) {
+        var filename = String(targetPath || "");
         if (filename === "")
             return;
-        openFolderProcess.command = ["bash", "-c", 'dir="${1/#\\~/$HOME}"; case "$dir" in *.*) dir="$(dirname "$dir")" ;; esac; xdg-open "$dir"', "--", filename];
-        openFolderProcess.running = true;
+        try {
+            var proc = Qt.createQmlObject('import Quickshell.Io; Process {}', root);
+            proc.command = [
+                "bash", "-c",
+                'target="${1/#\\~/$HOME}"; ' +
+                'if [ "$2" = "dir" ]; then ' +
+                '  case "$target" in *.*) target="$(dirname "$target")" ;; esac; ' +
+                '  mkdir -p "$target"; ' +
+                'fi; ' +
+                '(setsid gio open "$target" || setsid xdg-open "$target") </dev/null >/dev/null 2>&1 &',
+                "--", filename, isDir ? "dir" : "file"
+            ];
+            proc.exited.connect(function() {
+                proc.destroy();
+            });
+            proc.running = true;
+        } catch (e) {
+            openerProcess.command = [
+                "bash", "-c",
+                'target="${1/#\\~/$HOME}"; ' +
+                'if [ "$2" = "dir" ]; then ' +
+                '  case "$target" in *.*) target="$(dirname "$target")" ;; esac; ' +
+                '  mkdir -p "$target"; ' +
+                'fi; ' +
+                '(setsid gio open "$target" || setsid xdg-open "$target") </dev/null >/dev/null 2>&1 &',
+                "--", filename, isDir ? "dir" : "file"
+            ];
+            openerProcess.running = true;
+        }
+    }
+
+    function openHistoryFolder(path) {
+        executeDetached(path, true);
     }
 
     function playHistoryFile(path) {
-        var filename = String(path || "");
-        if (filename === "")
-            return;
-        openFolderProcess.command = ["bash", "-c", 'file="${1/#\\~/$HOME}"; if [ -f "$file" ]; then xdg-open "$file"; else xdg-open "$(dirname "$file")"; fi', "--", filename];
-        openFolderProcess.running = true;
+        executeDetached(path, false);
     }
 
     // IpcHandler functions are registered as void: returning a value makes Qt
@@ -437,18 +467,67 @@ Item {
     }
 
     Process {
-        id: openFolderProcess
+        id: openerProcess
         running: false
-        stderr: SplitParser {
-            onRead: function(line) {
-                console.warn("YTD: xdg-open:", line);
+    }
+
+    Process {
+        id: fileCheckProcess
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = text.split("\n");
+                var map = Object.assign({}, root.existingFiles);
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim();
+                    if (line.length < 2) continue;
+                    var sep = line.indexOf(":");
+                    if (sep === -1) continue;
+                    var exists = line.slice(0, sep) === "1";
+                    var fpath = line.slice(sep + 1);
+                    map[fpath] = exists;
+                }
+                root.existingFiles = map;
+                if (root.checkPending) {
+                    root.checkPending = false;
+                    Qt.callLater(root.checkHistoryFiles);
+                }
             }
         }
-        onExited: function(code) {
-            if (code === 0)
-                return;
-            YtdService.state = "error";
-            YtdService.message = YtdI18n.t("opener_failed");
+    }
+
+    function checkHistoryFiles() {
+        if (!YtdService.history || YtdService.history.length === 0)
+            return;
+        if (fileCheckProcess.running) {
+            checkPending = true;
+            return;
+        }
+        var paths = [];
+        for (var i = 0; i < YtdService.history.length; i++) {
+            var fn = YtdService.history[i].filename;
+            if (fn && fn !== "") {
+                paths.push(fn);
+            }
+        }
+        if (paths.length === 0)
+            return;
+        fileCheckProcess.command = [
+            "bash", "-c",
+            'for f in "$@"; do ef="${f/#\\~/$HOME}"; if [ -f "$ef" ]; then echo "1:$f"; else echo "0:$f"; fi; done',
+            "--"
+        ].concat(paths);
+        fileCheckProcess.running = true;
+    }
+
+    Component.onCompleted: {
+        root.checkHistoryFiles();
+    }
+
+    Connections {
+        target: YtdService
+        function onHistoryChanged() {
+            root.checkHistoryFiles();
         }
     }
 
@@ -1164,10 +1243,22 @@ Item {
                                 delegate: Rectangle {
                                     id: historyCard
                                     required property var modelData
+
+                                    readonly property bool fileExists: {
+                                        var fn = modelData.filename || "";
+                                        if (fn === "")
+                                            return false;
+                                        if (root.existingFiles.hasOwnProperty(fn))
+                                            return !!root.existingFiles[fn];
+                                        return true;
+                                    }
+
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 56
                                     radius: Styling.radius(-3)
-                                    color: (historyCardHover.hovered || cardClickArea.containsMouse) ? root.cardBgHoverColor : root.cardBgColor
+                                    color: (historyCardHover.hovered || (cardClickArea.containsMouse && historyCard.fileExists))
+                                        ? root.cardBgHoverColor
+                                        : root.cardBgColor
 
                                     Behavior on color {
                                         enabled: Config.animDuration > 0
@@ -1184,98 +1275,112 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         anchors.right: actionButtonsRow.left
-                                        cursorShape: Qt.PointingHandCursor
+                                        cursorShape: historyCard.fileExists ? Qt.PointingHandCursor : Qt.ArrowCursor
                                         hoverEnabled: true
+                                        enabled: historyCard.fileExists
                                         onClicked: {
-                                            if (modelData.filename)
+                                            if (historyCard.fileExists && modelData.filename)
                                                 root.playHistoryFile(modelData.filename);
                                         }
                                     }
 
                                     StyledToolTip {
                                         show: cardClickArea.containsMouse && !openHistoryFolderButton.hovered && !removeHistoryButton.hovered
-                                        tooltipText: "Play " + (modelData.title || "media")
+                                        tooltipText: historyCard.fileExists
+                                            ? ("Play " + (modelData.title || "media"))
+                                            : ("File not found: " + (modelData.filename || "unknown"))
                                     }
 
                                     RowLayout {
                                         anchors.fill: parent
                                         anchors.margins: 8
                                         spacing: 10
-                                        ClippingRectangle {
-                                            Layout.preferredWidth: 40
-                                            Layout.preferredHeight: 40
-                                            radius: Styling.radius(-4)
-                                            color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.10)
-                                            YtdIcon {
-                                                anchors.centerIn: parent
-                                                width: 18
-                                                height: 18
-                                                iconSize: 18
-                                                visible: historyThumbnail.status !== Image.Ready || modelData.thumbnail === ""
-                                            }
-                                            Image {
-                                                id: historyThumbnail
-                                                anchors.fill: parent
-                                                source: modelData.thumbnail || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                asynchronous: true
-                                                smooth: true
-                                            }
-                                            // Play overlay on hover
-                                            Rectangle {
-                                                anchors.fill: parent
-                                                color: Qt.rgba(0, 0, 0, 0.45)
-                                                visible: cardClickArea.containsMouse
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: Icons.play
-                                                    color: Colors.white
-                                                    font.family: Icons.font
-                                                    font.pixelSize: 16
-                                                }
-                                            }
-                                        }
-                                        ColumnLayout {
+
+                                        // Left media section (thumbnail + text), dimmed/grayed out if file does not exist
+                                        RowLayout {
                                             Layout.fillWidth: true
-                                            spacing: 3
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.title
-                                                color: Colors.overBackground
-                                                font.family: Styling.defaultFont
-                                                font.pixelSize: Styling.fontSize(-1)
-                                                font.bold: true
-                                                elide: Text.ElideRight
-                                            }
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 6
+                                            Layout.fillHeight: true
+                                            spacing: 10
+                                            opacity: historyCard.fileExists ? 1.0 : 0.45
+
+                                            ClippingRectangle {
+                                                Layout.preferredWidth: 40
+                                                Layout.preferredHeight: 40
+                                                radius: Styling.radius(-4)
+                                                color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.10)
+                                                YtdIcon {
+                                                    anchors.centerIn: parent
+                                                    width: 18
+                                                    height: 18
+                                                    iconSize: 18
+                                                    visible: historyThumbnail.status !== Image.Ready || modelData.thumbnail === ""
+                                                }
+                                                Image {
+                                                    id: historyThumbnail
+                                                    anchors.fill: parent
+                                                    source: modelData.thumbnail || ""
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    asynchronous: true
+                                                    smooth: true
+                                                }
+                                                // Play overlay on hover (only for existing playable files)
                                                 Rectangle {
-                                                    Layout.preferredHeight: 18
-                                                    Layout.preferredWidth: formatBadgeText.implicitWidth + 8
-                                                    radius: Styling.radius(-5)
-                                                    color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
+                                                    anchors.fill: parent
+                                                    color: Qt.rgba(0, 0, 0, 0.45)
+                                                    visible: historyCard.fileExists && cardClickArea.containsMouse
                                                     Text {
-                                                        id: formatBadgeText
                                                         anchors.centerIn: parent
-                                                        text: modelData.format
-                                                        color: Colors.overBackground
-                                                        font.family: Styling.defaultFont
-                                                        font.pixelSize: 10
-                                                        font.bold: true
+                                                        text: Icons.play
+                                                        color: Colors.white
+                                                        font.family: Icons.font
+                                                        font.pixelSize: 16
                                                     }
                                                 }
+                                            }
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 3
                                                 Text {
                                                     Layout.fillWidth: true
-                                                    text: modelData.filename !== "" ? modelData.filename : modelData.url
+                                                    text: modelData.title
                                                     color: Colors.overBackground
-                                                    opacity: 0.65
                                                     font.family: Styling.defaultFont
-                                                    font.pixelSize: 11
-                                                    elide: Text.ElideMiddle
+                                                    font.pixelSize: Styling.fontSize(-1)
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                }
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 6
+                                                    Rectangle {
+                                                        Layout.preferredHeight: 18
+                                                        Layout.preferredWidth: formatBadgeText.implicitWidth + 8
+                                                        radius: Styling.radius(-5)
+                                                        color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
+                                                        Text {
+                                                            id: formatBadgeText
+                                                            anchors.centerIn: parent
+                                                            text: modelData.format
+                                                            color: Colors.overBackground
+                                                            font.family: Styling.defaultFont
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                        }
+                                                    }
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: (!historyCard.fileExists ? "[Missing] " : "") + (modelData.filename !== "" ? modelData.filename : modelData.url)
+                                                        color: !historyCard.fileExists ? Colors.red : Colors.overBackground
+                                                        opacity: 0.65
+                                                        font.family: Styling.defaultFont
+                                                        font.pixelSize: 11
+                                                        elide: Text.ElideMiddle
+                                                    }
                                                 }
                                             }
                                         }
+
+                                        // Right side action buttons
                                         RowLayout {
                                             id: actionButtonsRow
                                             Layout.preferredWidth: 54
@@ -1285,11 +1390,12 @@ Item {
                                                 Layout.preferredWidth: 26
                                                 Layout.preferredHeight: 26
                                                 focusPolicy: Qt.NoFocus
-                                                enabled: modelData.filename !== ""
+                                                enabled: historyCard.fileExists && modelData.filename !== ""
+                                                opacity: enabled ? (hovered ? 1.0 : 0.8) : 0.3
                                                 onClicked: root.openHistoryFolder(modelData.filename)
                                                 background: Rectangle {
                                                     radius: Styling.radius(-5)
-                                                    color: openHistoryFolderButton.hovered
+                                                    color: openHistoryFolderButton.enabled && openHistoryFolderButton.hovered
                                                         ? Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.18)
                                                         : "transparent"
                                                 }
@@ -1298,7 +1404,6 @@ Item {
                                                     color: openHistoryFolderButton.enabled
                                                         ? (openHistoryFolderButton.hovered ? Colors.primary : Colors.overBackground)
                                                         : Colors.outline
-                                                    opacity: openHistoryFolderButton.hovered ? 1.0 : 0.8
                                                     font.family: Icons.font
                                                     font.pixelSize: 15
                                                     horizontalAlignment: Text.AlignHCenter
@@ -1307,7 +1412,9 @@ Item {
                                                 Accessible.name: YtdI18n.t("open_folder")
                                                 StyledToolTip {
                                                     show: openHistoryFolderButton.hovered
-                                                    tooltipText: YtdI18n.t("open_folder")
+                                                    tooltipText: openHistoryFolderButton.enabled
+                                                        ? YtdI18n.t("open_folder")
+                                                        : "File not found"
                                                 }
                                             }
                                             Button {
@@ -1315,6 +1422,7 @@ Item {
                                                 Layout.preferredWidth: 26
                                                 Layout.preferredHeight: 26
                                                 focusPolicy: Qt.NoFocus
+                                                enabled: true
                                                 onClicked: YtdService.removeHistoryItem(modelData.itemId || modelData.filename || modelData.url)
                                                 background: Rectangle {
                                                     radius: Styling.radius(-5)
@@ -1367,6 +1475,7 @@ Item {
                 return;
 
             isOpen = true;
+            root.checkHistoryFiles();
             // Measure the button now, while it is at its real on-screen
             // position, instead of relying on a load-time value.
             reposition();
