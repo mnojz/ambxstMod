@@ -937,152 +937,134 @@ Item {
                                     onClicked: root.startDownload()
                                 }
 
-                                // Active download card (shown while downloading or on error)
+                                // Active download card (compact 56px card matching loading and history card height)
                                 StyledRect {
                                     id: activeCardRect
                                     Layout.fillWidth: true
-                                    implicitHeight: detailsColumn.implicitHeight + 16
-                                    radius: Styling.radius(0)
+                                    implicitHeight: 56
+                                    radius: Styling.radius(-3)
                                     variant: "common"
                                     enableShadow: false
                                     visible: root.activeCardVisible
 
-                                    ColumnLayout {
-                                        id: detailsColumn
+                                    RowLayout {
                                         anchors.fill: parent
-                                        anchors.margins: 10
+                                        anchors.margins: 8
                                         spacing: 8
 
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 10
+                                        // Left Thumbnail (wider, matching parent roundness)
+                                        ClippingRectangle {
+                                            Layout.preferredWidth: 54
+                                            Layout.preferredHeight: 40
+                                            radius: activeCardRect.radius > 0 ? Math.max(activeCardRect.radius - 8, 2) : 0
+                                            color: Colors.outlineVariant
 
-                                            ClippingRectangle {
-                                                Layout.preferredWidth: 50
-                                                Layout.preferredHeight: 50
-                                                radius: Styling.radius(-3)
-                                                color: Colors.outlineVariant
-                                                YtdIcon {
-                                                    anchors.centerIn: parent
-                                                    width: 22
-                                                    height: 22
-                                                    iconSize: 22
-                                                    visible: thumbnailImage.status !== Image.Ready || YtdService.thumbnail === ""
-                                                }
-                                                Image {
-                                                    id: thumbnailImage
-                                                    anchors.fill: parent
-                                                    source: YtdService.thumbnail
-                                                    fillMode: Image.PreserveAspectCrop
-                                                    asynchronous: true
-                                                    smooth: true
+                                            YtdIcon {
+                                                anchors.centerIn: parent
+                                                width: 20
+                                                height: 20
+                                                iconSize: 20
+                                                visible: thumbnailImage.status !== Image.Ready || YtdService.thumbnail === ""
+                                            }
+
+                                            Image {
+                                                id: thumbnailImage
+                                                anchors.fill: parent
+                                                source: YtdService.thumbnail
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                smooth: true
+                                            }
+                                        }
+
+                                        // Middle Content Column
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.alignment: Qt.AlignVCenter
+                                            spacing: 3
+
+                                            // Title
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: YtdService.title !== "" ? YtdService.title : root.statusText()
+                                                color: Colors.overBackground
+                                                font.family: Styling.defaultFont
+                                                font.pixelSize: Styling.fontSize(-1)
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                            }
+
+                                            // Progress Bar (thin, only during starting/downloading)
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                height: 3
+                                                radius: 1.5
+                                                color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.20)
+                                                visible: YtdService.state === "starting" || YtdService.state === "downloading"
+
+                                                Rectangle {
+                                                    width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
+                                                    height: parent.height
+                                                    radius: 1.5
+                                                    color: Colors.primary
+
+                                                    Behavior on width {
+                                                        enabled: Config.animDuration > 0
+                                                        NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
+                                                    }
                                                 }
                                             }
 
-                                            ColumnLayout {
+                                            // Subtitle: Stats or Message
+                                            RowLayout {
                                                 Layout.fillWidth: true
                                                 spacing: 4
+                                                visible: YtdService.state === "starting" || YtdService.state === "downloading"
 
                                                 Text {
-                                                    Layout.fillWidth: true
-                                                    text: YtdService.title !== "" ? YtdService.title : root.statusText()
-                                                    color: Colors.overBackground
+                                                    text: (YtdService.itemCount > 1 ? YtdService.completedCount + "/" + YtdService.itemCount + " · " : "") + Math.round(YtdService.progress) + "%"
+                                                    color: Colors.primary
                                                     font.family: Styling.defaultFont
-                                                    font.pixelSize: Styling.fontSize(0)
+                                                    font.pixelSize: 11
                                                     font.bold: true
-                                                    elide: Text.ElideMiddle
                                                 }
 
                                                 Text {
                                                     Layout.fillWidth: true
-                                                    visible: YtdService.filename !== ""
-                                                    text: YtdService.filename
+                                                    text: (YtdService.total > 0 ? YtdService.formatBytes(YtdService.downloaded) + " / " + YtdService.formatBytes(YtdService.total) : (YtdService.filename !== "" ? YtdService.filename : (YtdService.state === "starting" ? "Starting..." : ""))) + (YtdService.speed > 0 ? " · " + YtdService.formatSpeed(YtdService.speed) : "")
                                                     color: Colors.overBackground
                                                     opacity: 0.72
                                                     font.family: Styling.defaultFont
-                                                    font.pixelSize: Styling.fontSize(-1)
+                                                    font.pixelSize: 11
                                                     elide: Text.ElideMiddle
                                                 }
-
-                                                ColumnLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: 4
-                                                    visible: YtdService.state === "starting" || YtdService.state === "downloading"
-
-                                                    Rectangle {
-                                                        Layout.fillWidth: true
-                                                        height: 5
-                                                        radius: 2.5
-                                                        color: Qt.rgba(Colors.primary.r, Colors.primary.g, Colors.primary.b, 0.15)
-                                                        Rectangle {
-                                                            width: parent.width * Math.max(0, Math.min(100, YtdService.progress)) / 100
-                                                            height: parent.height
-                                                            radius: 2.5
-                                                            color: Colors.primary
-                                                            Behavior on width {
-                                                                enabled: Config.animDuration > 0
-                                                                NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
-                                                            }
-                                                        }
-                                                    }
-
-                                                    RowLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 4
-
-                                                        Text {
-                                                            text: (YtdService.itemCount > 0 ? YtdService.completedCount + "/" + YtdService.itemCount + " · " : "") + Math.round(YtdService.progress) + "%"
-                                                            color: Colors.primary
-                                                            font.family: Styling.defaultFont
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                        }
-
-                                                        Text {
-                                                            Layout.fillWidth: true
-                                                            text: YtdService.formatBytes(YtdService.downloaded) + (YtdService.total > 0 ? " / " + YtdService.formatBytes(YtdService.total) : "")
-                                                            color: Colors.overBackground
-                                                            opacity: 0.8
-                                                            font.family: Styling.defaultFont
-                                                            font.pixelSize: 11
-                                                            horizontalAlignment: Text.AlignRight
-                                                            elide: Text.ElideRight
-                                                        }
-
-                                                        Text {
-                                                            visible: YtdService.speed > 0
-                                                            text: YtdService.formatSpeed(YtdService.speed)
-                                                            color: Colors.overBackground
-                                                            opacity: 0.8
-                                                            font.family: Styling.defaultFont
-                                                            font.pixelSize: 11
-                                                        }
-
-                                                        HelperButton {
-                                                            id: cancelButton
-                                                            implicitWidth: 26
-                                                            implicitHeight: 26
-                                                            focusPolicy: Qt.NoFocus
-                                                            visible: YtdService.running
-                                                            iconText: Icons.cancel
-                                                            danger: true
-                                                            tooltipText: YtdI18n.t("stop_download")
-                                                            onClicked: YtdService.cancel()
-                                                        }
-                                                    }
-                                                }
-
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    visible: YtdService.message !== "" && (YtdService.state === "error" || YtdService.state === "cancelled")
-                                                    text: YtdService.message
-                                                    color: YtdService.state === "error" ? Colors.red : Colors.overBackground
-                                                    opacity: YtdService.state === "error" ? 1.0 : 0.75
-                                                    font.family: Styling.defaultFont
-                                                    font.pixelSize: Styling.fontSize(-1)
-                                                    elide: Text.ElideRight
-                                                }
                                             }
+
+                                            // Error / Cancelled message
+                                            Text {
+                                                Layout.fillWidth: true
+                                                visible: YtdService.message !== "" && (YtdService.state === "error" || YtdService.state === "cancelled")
+                                                text: YtdService.message
+                                                color: YtdService.state === "error" ? Colors.red : Colors.overBackground
+                                                opacity: YtdService.state === "error" ? 1.0 : 0.75
+                                                font.family: Styling.defaultFont
+                                                font.pixelSize: 11
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        // Cancel Button
+                                        HelperButton {
+                                            id: cancelButton
+                                            implicitWidth: 26
+                                            implicitHeight: 26
+                                            Layout.alignment: Qt.AlignVCenter
+                                            focusPolicy: Qt.NoFocus
+                                            visible: YtdService.running
+                                            iconText: Icons.cancel
+                                            danger: true
+                                            tooltipText: YtdI18n.t("stop_download")
+                                            onClicked: YtdService.cancel()
                                         }
                                     }
                                 }
@@ -1262,16 +1244,16 @@ Item {
                                                         opacity: historyCard.fileExists ? 1.0 : 0.35
 
                                                         ClippingRectangle {
-                                                            Layout.preferredWidth: 38
-                                                            Layout.preferredHeight: 38
-                                                            radius: Styling.radius(-4)
+                                                            Layout.preferredWidth: 54
+                                                            Layout.preferredHeight: 40
+                                                            radius: historyCard.radius > 0 ? Math.max(historyCard.radius - 8, 2) : 0
                                                             color: Colors.outlineVariant
 
                                                             YtdIcon {
                                                                 anchors.centerIn: parent
-                                                                width: 18
-                                                                height: 18
-                                                                iconSize: 18
+                                                                width: 20
+                                                                height: 20
+                                                                iconSize: 20
                                                                 visible: historyThumbnail.status !== Image.Ready || modelData.thumbnail === ""
                                                             }
 
