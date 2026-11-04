@@ -149,9 +149,91 @@ Item {
         return actions.join(", ");
     }
 
+    component KdeConnectIcon: Item {
+        id: iconControl
+        property real size: 16
+        property color color: Colors.overBackground
+        property string text: root.mainGlyph
+        implicitWidth: size
+        implicitHeight: size
+        Layout.preferredWidth: size
+        Layout.preferredHeight: size
+
+        Canvas {
+            id: iconCanvas
+            anchors.fill: parent
+            antialiasing: true
+
+            onPaint: {
+                let ctx = getContext("2d");
+                ctx.reset();
+
+                let w = width;
+                let h = height;
+                if (w <= 0 || h <= 0)
+                    return;
+
+                // Phosphor device-mobile fill proportions (144 / 224 ≈ 0.643)
+                const targetRatio = 144.0 / 224.0;
+                let ph = Math.min(h * 0.92, (w * 0.92) / targetRatio);
+                let pw = ph * targetRatio;
+                let px = (w - pw) / 2.0;
+                let py = (h - ph) / 2.0;
+                let s = ph / 224.0;
+                let pr = 24.0 * s;
+
+                // 1. Solid phone body with rounded corners
+                ctx.globalCompositeOperation = "source-over";
+                ctx.fillStyle = iconControl.color;
+                ctx.beginPath();
+                ctx.arc(px + pw - pr, py + pr, pr, -Math.PI / 2, 0);
+                ctx.arc(px + pw - pr, py + ph - pr, pr, 0, Math.PI / 2);
+                ctx.arc(px + pr, py + ph - pr, pr, Math.PI / 2, Math.PI);
+                ctx.arc(px + pr, py + pr, pr, Math.PI, 3 * Math.PI / 2);
+                ctx.closePath();
+                ctx.fill();
+
+                // 2. Negative space cutouts: screen window and circular home button
+                ctx.globalCompositeOperation = "destination-out";
+
+                // Screen cutout (x: 80, y: 48, w: 96, h: 128 in Phosphor 256x256 grid)
+                let sx = px + (80.0 - 56.0) * s;
+                let sy = py + (48.0 - 16.0) * s;
+                let sw = 96.0 * s;
+                let sh = 128.0 * s;
+                let sr = Math.max(0.5, 6.0 * s);
+                ctx.beginPath();
+                ctx.arc(sx + sw - sr, sy + sr, sr, -Math.PI / 2, 0);
+                ctx.arc(sx + sw - sr, sy + sh - sr, sr, 0, Math.PI / 2);
+                ctx.arc(sx + sr, sy + sh - sr, sr, Math.PI / 2, Math.PI);
+                ctx.arc(sx + sr, sy + sr, sr, Math.PI, 3 * Math.PI / 2);
+                ctx.closePath();
+                ctx.fill();
+
+                // Circular home button (center x: 128, y: 212, r: 12 in Phosphor 256x256 grid)
+                let cx = px + (128.0 - 56.0) * s;
+                let cy = py + (212.0 - 16.0) * s;
+                let cr = 12.0 * s;
+                ctx.beginPath();
+                ctx.arc(cx, cy, cr, 0, 2 * Math.PI);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.globalCompositeOperation = "source-over";
+            }
+
+            Connections {
+                target: iconControl
+                function onColorChanged() { iconCanvas.requestPaint(); }
+                function onSizeChanged() { iconCanvas.requestPaint(); }
+            }
+        }
+    }
+
     component HelperButton: Button {
         id: control
         property string iconText: ""
+        property bool useKdeIcon: false
         property string labelText: ""
         property string tooltipText: ""
         property bool danger: false
@@ -167,9 +249,15 @@ Item {
             enableShadow: false
         }
         contentItem: RowLayout {
-            spacing: control.iconText.length > 0 && control.labelText.length > 0 ? 6 : 0
+            spacing: (control.iconText.length > 0 || control.useKdeIcon) && control.labelText.length > 0 ? 6 : 0
+            KdeConnectIcon {
+                visible: control.useKdeIcon
+                Layout.alignment: control.labelText.length === 0 ? Qt.AlignCenter : Qt.AlignVCenter
+                size: control.labelText.length === 0 ? 18 : 16
+                color: control.danger ? Colors.red : helperButtonBackground.item
+            }
             Text {
-                visible: control.iconText.length > 0
+                visible: control.iconText.length > 0 && !control.useKdeIcon
                 Layout.alignment: control.labelText.length === 0 ? Qt.AlignCenter : Qt.AlignVCenter
                 text: control.iconText
                 font.family: Icons.font
@@ -298,15 +386,14 @@ Item {
             }
         }
 
-        // Central icon (centered mobile device glyph)
-        Text {
+        // Central icon (custom solid KDE Connect shape, with fallback text glyph)
+        KdeConnectIcon {
             id: centralIcon
             anchors.centerIn: parent
             anchors.verticalCenterOffset: root.deviceCharging ? -1 : 0
-            text: root.mainGlyph
-            font.family: Icons.font
-            font.pixelSize: (root.hasBattery && !!root.device?.reachable) ? 14 : 17
+            size: (root.hasBattery && !!root.device?.reachable) ? 14 : 17
             color: root.popupOpen ? buttonBackground.item : Styling.srItem("overprimary")
+            text: root.mainGlyph
 
             Behavior on color {
                 enabled: Config.animDuration > 0
@@ -391,10 +478,11 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    Text {
-                        text: Icons.deviceMobile
-                        font.family: Icons.font
-                        font.pixelSize: 20
+                    KdeConnectIcon {
+                        size: 20
+                        Layout.preferredWidth: 20
+                        Layout.preferredHeight: 20
+                        Layout.alignment: Qt.AlignVCenter
                         color: Colors.overBackground
                     }
 
@@ -538,7 +626,8 @@ Item {
                         delegate: HelperButton {
                             required property var modelData
                             Layout.fillWidth: true
-                            iconText: modelData.reachable ? Icons.deviceMobile : Icons.alert
+                            useKdeIcon: modelData.reachable
+                            iconText: modelData.reachable ? "" : Icons.alert
                             labelText: modelData.name + "  " + I18n.t("kde_connect_helper.device."
                                 + (modelData.reachable ? "connected" : "offline"))
                             checked: KdeConnectService.selectedDevice?.id === modelData.id
@@ -573,15 +662,13 @@ Item {
                             Layout.fillWidth: true
                             spacing: 8
 
-                            Text {
-                                Layout.preferredWidth: 20
-                                text: Icons.deviceMobile
-                                font.family: Icons.font
-                                font.pixelSize: 16
+                            KdeConnectIcon {
+                                size: 18
+                                Layout.preferredWidth: 18
+                                Layout.preferredHeight: 18
+                                Layout.alignment: Qt.AlignVCenter
                                 color: root.device?.reachable ? Colors.primary : Colors.overBackground
                                 opacity: root.device?.reachable ? 1 : 0.5
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
                             }
 
                             Text {

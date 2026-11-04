@@ -58,7 +58,7 @@ index 3333506c..d2ed392a 100644
 
      readonly property string headphones: ""
      readonly property string mouse: ""
-+    readonly property string deviceMobile: ""
++    readonly property string deviceMobile: ""
      readonly property string phone: ""
      readonly property string watch: ""
      readonly property string gamepad: ""
