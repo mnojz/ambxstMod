@@ -1,37 +1,100 @@
-# KDE Connect helper
+<div align="center">
 
-KDE Connect helper adds a 36-pixel Ambxst bar control for paired devices. It supports horizontal and vertical bars, connected and offline devices, multiple-device selection, battery status, and Ambxst styling.
+# KDE Connect Helper
 
-The popup can refresh discovery, start the daemon, open an installed official KDE Connect interface, manage user autostart, ping or ring a supported device, and share confirmed files or text. File selection uses the desktop portal, so the system provides the picker. Unsupported actions stay disabled and explain why. Device state comes from structured D-Bus properties instead of localized CLI output.
+**Your phone, a click away from your Ambxst bar.**
+
+Device status · Battery level · Quick actions · File sharing
+
+[Install](#install) · [Connect your device](#connect-your-device) · [Quick actions](#quick-actions)
+
+</div>
+
+---
+
+Check your paired devices, see their battery level, and send files without leaving
+your desktop. Works with horizontal and vertical Ambxst bars.
 
 ## Install
 
-Paste this URL into **Settings > Mods**:
+Requires **Ambxst 1.3.8–1.3.x** and **Python 3**.
+
+Paste these commands into your terminal:
+
+```bash
+ambxst mods install https://github.com/mnojz/ambxstMod/tree/main/kde-connect-helper
+ambxst mods enable mnojz.kde-connect-helper
+ambxst reload
+```
+
+The helper button will appear in your bar.
+
+<details>
+<summary><strong>Prefer installing through Settings?</strong></summary>
+
+Open **Settings → Mods** and install from this URL:
 
 ```text
 https://github.com/mnojz/ambxstMod/tree/main/kde-connect-helper
 ```
 
-For a local checkout:
+Enable **KDE Connect helper**, then reload Ambxst.
 
-```bash
-ambxst mods install ./kde-connect-helper
-ambxst mods enable mnojz.kde-connect-helper
-ambxst reload
-```
+</details>
 
-The only mandatory manifest command is `python3`. KDE Connect is intentionally optional so the helper can load and present installation guidance when it is missing. Text sharing uses the Python D-Bus binding when available, which keeps shared text out of process arguments. The action stays disabled with a clear reason when that binding is unavailable.
+### Set up KDE Connect
 
-## Installation behavior
+The mod is an interface for KDE Connect, so KDE Connect must also be installed
+on your computer and phone.
 
-The helper detects the distribution, package manager, package name, and `pkexec` before offering an installation. It never installs on load. Arch and derivatives use the official `kdeconnect` package with pacman. Fedora and derivatives use the official `kde-connect` package with dnf. Both routes require a deliberate action followed by a separate confirmation.
+If it is missing on your computer, click the helper button for installation options:
 
-NixOS remains declarative. The helper shows `programs.kdeconnect.enable = true;` and an optional `nix profile` command, but never edits NixOS, flake, or Home Manager files. Unknown distributions receive manual guidance instead of a guessed command.
+- **Arch / Fedora and derivatives:** Guided installation is available when the
+  package manager and administrator authentication tool (`pkexec`) are detected.
+  Review and confirm before installation starts.
+- **NixOS:** Follow the configuration instructions shown in the popup.
+- **Other distributions:** Install KDE Connect using your distribution's package manager.
 
-## Autostart and security
+> Installing the mod does not automatically install KDE Connect. The popup guides
+> you through the next step.
 
-Autostart uses a marked user systemd service when the user manager is available. Otherwise it uses a marked XDG autostart entry. Disabling autostart removes only files with the package marker. If the distribution already provides the KDE Connect XDG entry, disabling creates a marked user override instead of changing the system file.
+## Connect your device
 
-External commands use validated executable paths and argument arrays. Privileged installation accepts only fixed, root-owned package-manager and `pkexec` paths. There is no shell evaluation. Process output is bounded, device identifiers are validated, operations have timeouts, and file or text sharing requires confirmation. The helper does not log device names, file paths, or shared text.
+1. Open **KDE Connect** on your phone and computer.
+2. Connect both devices to the **same network**.
+3. Request pairing and accept it on the other device.
+4. Click the helper button in Ambxst to see your paired devices.
 
-All interface and settings text is translated into English, Russian, and Spanish through Ambxst's localization service. Before the mod is enabled, its settings use readable English because disabled packages cannot register translations. After activation and reload, the settings follow the Ambxst language. The tray option hides only KDE Connect status items identified by their tray metadata. The settings patch only routes schema labels, descriptions, and enum choices through the existing `I18n` service. It contains no mod-manager backend, update, or recovery code.
+If the desktop service is stopped, use **Start KDE Connect** in the popup.
+Select a device from the list when you have more than one paired.
+
+## Quick actions
+
+| Action | What it does |
+| :--- | :--- |
+| **Ping** | Sends a notification to your device |
+| **Ring** | Makes your device ring so you can find it |
+| **Send files** | Opens a file picker, then asks you to confirm before sending |
+| **Browse files** | Opens remote files in your file manager when supported |
+
+Battery and connection details appear when available. Actions are enabled only
+when the selected device is connected and supports them.
+
+## Settings
+
+Open the mod's settings in **Settings → Mods**:
+
+| Setting | Description |
+| :--- | :--- |
+| **Preferred device** | Choose a device in the popup to remember it, or use `auto` |
+| **Polling interval** | Time between status checks: **5–300 seconds**, default **15** |
+
+The interface follows Ambxst's language, with English, Russian, and Spanish translations.
+
+## Troubleshooting
+
+- **No paired devices:** Open KDE Connect and finish pairing first.
+- **Device offline:** Check that both devices are on the same network and KDE Connect is running.
+- **Status not loading:** Make sure `qdbus6` or `qdbus` is installed on your computer.
+- **File picker unavailable:** Check that your desktop portal is running and Python's D-Bus and GLib bindings are installed.
+- **Action disabled:** The device may be offline or its KDE Connect plugin may be disabled.
