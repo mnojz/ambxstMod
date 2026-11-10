@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland as Hyprland
 import qs.config
 
 import Quickshell.Widgets
@@ -18,6 +19,7 @@ import "../services/YtdUrl.js" as YtdUrl
 Item {
     id: root
     required property var bar
+    readonly property bool nativePopupDismissal: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== ""
     property bool vertical: bar.orientation === "vertical"
     property bool layerEnabled: true
     property real startRadius: Styling.radius(0)
@@ -571,6 +573,30 @@ Item {
         }
     }
 
+    // Observe bar presses without taking the event from the clicked button.
+    // The opening button keeps its own toggle behavior.
+    MouseArea {
+        parent: root.bar
+        anchors.fill: parent
+        z: 10000
+        enabled: root.nativePopupDismissal && root.popupOpen
+        acceptedButtons: Qt.AllButtons
+        hoverEnabled: false
+        onPressed: mouse => {
+            const p = root.mapFromItem(root.bar, mouse.x, mouse.y);
+            if (p.x < 0 || p.y < 0 || p.x >= root.width || p.y >= root.height)
+                popup.close();
+            // Reject the press so Qt delivers it to the real button below.
+            mouse.accepted = false;
+        }
+    }
+
+    Hyprland.HyprlandFocusGrab {
+        active: root.nativePopupDismissal && root.popupOpen
+        windows: [popup, root.bar.QsWindow.window]
+        onCleared: popup.close()
+    }
+
     // Keyboard input: this popup is a mod-owned PanelWindow rather than a
     // BarPopup. BarPopup is a Quickshell PopupWindow, which is not a
     // WlrLayerShell surface and therefore cannot request keyboard
@@ -590,6 +616,7 @@ Item {
         // window is actually mapped and the button shows its idle style when
         // closed.
         property bool isOpen: false
+        readonly property string groupId: "bar"
 
         // Position of the popup's top-left corner, in screen coordinates.
         // Assigned by reposition() rather than bound: see the comment there.
@@ -621,7 +648,15 @@ Item {
             right: true
         }
         color: "transparent"
+        screen: root.bar.screen
         visible: false
+        // Outside the card, let the compositor deliver input to the bar or
+        // desktop. The native grab observes dismissal without a backdrop.
+        mask: root.nativePopupDismissal ? popupInputMask : null
+        Region {
+            id: popupInputMask
+            item: background
+        }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "ambxst-ytd"
@@ -672,11 +707,11 @@ Item {
             }
         }
 
-        // Clicks anywhere outside the popup dismiss it. The bar button sits
-        // *underneath* this full-screen surface, so without this the button
-        // could never be clicked a second time to toggle the popup closed.
+        // Backdrop fallback for compositors without native outside-click
+        // detection. On Hyprland this must not cover the other bar controls.
         MouseArea {
             anchors.fill: parent
+            enabled: !root.nativePopupDismissal
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             onPressed: popup.close()
         }
@@ -1382,6 +1417,8 @@ Item {
             if (visible)
                 return;
 
+            if (typeof Visibilities.registerBarPopup === "function")
+                Visibilities.registerBarPopup(popup);
             root.currentView = "downloader";
             isOpen = true;
             root.checkHistoryFiles();
@@ -1392,6 +1429,8 @@ Item {
         }
 
         function close() {
+            if (typeof Visibilities.unregisterBarPopup === "function")
+                Visibilities.unregisterBarPopup(popup);
             isOpen = false;
             visible = false;
             root.currentView = "downloader";
@@ -1402,6 +1441,11 @@ Item {
                 close();
             else
                 open();
+        }
+
+        Component.onDestruction: {
+            if (typeof Visibilities.unregisterBarPopup === "function")
+                Visibilities.unregisterBarPopup(popup);
         }
 
         // The bar can move (hide/reveal, layout change) while the popup is

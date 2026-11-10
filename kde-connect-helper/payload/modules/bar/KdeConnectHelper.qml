@@ -3,6 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Hyprland as Hyprland
 import qs.config
 import qs.modules.components
 import qs.modules.services
@@ -12,6 +14,7 @@ Item {
     id: root
 
     required property var bar
+    readonly property bool nativePopupDismissal: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== ""
     property bool vertical: bar.orientation === "vertical"
     property bool layerEnabled: true
     property real startRadius: Styling.radius(0)
@@ -20,7 +23,7 @@ Item {
     property string confirmAction: ""
     property int installStep: 0
     property bool isHovered: false
-    readonly property bool popupOpen: helperPopup.isOpen
+    readonly property bool popupOpen: helperPopup.isOpen && helperPopup.visible
 
     HoverHandler {
         onHoveredChanged: root.isHovered = hovered
@@ -433,6 +436,34 @@ Item {
         desciription: root.tooltipDescription
     }
 
+    // Passive observation lets the same press close this popup and reach
+    // another bar button, including buttons that do not open a BarPopup.
+    MouseArea {
+        parent: root.bar
+        anchors.fill: parent
+        z: 10000
+        enabled: root.nativePopupDismissal && root.popupOpen
+        acceptedButtons: Qt.AllButtons
+        hoverEnabled: false
+        onPressed: mouse => {
+            const p = root.mapFromItem(root.bar, mouse.x, mouse.y);
+            if (p.x < 0 || p.y < 0 || p.x >= root.width || p.y >= root.height)
+                helperPopup.close();
+            // Reject the press so Qt delivers it to the real button below.
+            mouse.accepted = false;
+        }
+    }
+
+    Hyprland.HyprlandFocusGrab {
+        active: root.nativePopupDismissal && root.popupOpen
+            && KdeConnectService.operation !== "choose_files"
+        windows: [helperPopup, root.bar.QsWindow.window]
+        onCleared: {
+            if (KdeConnectService.operation !== "choose_files")
+                helperPopup.close();
+        }
+    }
+
     BarPopup {
         id: helperPopup
         anchorItem: buttonBackground
@@ -445,7 +476,15 @@ Item {
             confirmModal.visible ? confirmColumn.implicitHeight + 40 : 0)
         contentWidth: baseWidth + (scrollArea.overflowing ? root.scrollGutter : 0)
         contentHeight: Math.ceil(Math.min(neededHeight, root.popupSpace)) + popupPadding * 2
-        closeOnFocusLost: KdeConnectService.operation !== "choose_files"
+        clickThroughMargins: root.nativePopupDismissal
+        grabFocus: false
+        closeOnFocusLost: !root.nativePopupDismissal && KdeConnectService.operation !== "choose_files"
+        // BarPopup.open() enables Ambxst's backdrop grab after mapping.
+        // Use compositor dismissal instead, keeping the bar interactive.
+        onFocusActiveChanged: {
+            if (root.nativePopupDismissal && focusActive)
+                focusActive = false;
+        }
         onIsOpenChanged: {
             if (isOpen)
                 Qt.callLater(() => refreshButton.forceActiveFocus());
