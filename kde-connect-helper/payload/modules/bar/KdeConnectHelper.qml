@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland as Hyprland
+import Quickshell.Wayland
 import qs.config
 import qs.modules.components
 import qs.modules.services
@@ -464,27 +465,136 @@ Item {
         }
     }
 
-    BarPopup {
+    // Match YTD's layer window: only the card receives pointer input, and
+    // closing unmaps it immediately rather than leaving an animated popup
+    // surface between the press and release of another bar button.
+    PanelWindow {
         id: helperPopup
-        anchorItem: buttonBackground
-        bar: root.bar
-        popupPadding: 14
+        property bool isOpen: false
+        readonly property string groupId: "bar"
+        property int popupPadding: 14
+        readonly property int shadowMargin: 16
+        readonly property int visualMargin: 8
+        readonly property int totalWidth: contentWidth + shadowMargin * 2
+        readonly property int totalHeight: contentHeight + shadowMargin * 2
+        property real popupX: 0
+        property real popupY: 0
+
+        screen: root.bar.screen
+        anchors { top: true; bottom: true; left: true; right: true }
+        color: "transparent"
+        visible: false
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "ambxst-kde-connect-helper"
+        WlrLayershell.keyboardFocus: root.popupOpen && KdeConnectService.operation !== "choose_files"
+            ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        mask: root.nativePopupDismissal ? popupInputMask : null
+        Region { id: popupInputMask; item: popupBackground }
+
+        // The window owns the backdrop and card. Popup pages and dialogs
+        // explicitly parent to the padded container inside the card.
+        property MouseArea outsideArea: MouseArea {
+            parent: helperPopup.contentItem
+            anchors.fill: parent
+            enabled: !root.nativePopupDismissal
+            acceptedButtons: Qt.AllButtons
+            onPressed: helperPopup.close()
+        }
+        property Item popupSurface: Item {
+            parent: helperPopup.contentItem
+            x: helperPopup.popupX
+            y: helperPopup.popupY
+            width: helperPopup.totalWidth
+            height: helperPopup.totalHeight
+            z: 1
+            StyledRect {
+                id: popupBackground
+                anchors.fill: parent
+                anchors.margins: helperPopup.shadowMargin
+                variant: "popup"
+                enableShadow: true
+                radius: Styling.radius(8)
+                Item {
+                    id: popupContentContainer
+                    anchors.fill: parent
+                    anchors.margins: helperPopup.popupPadding
+                }
+            }
+        }
+        Shortcut {
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            enabled: helperPopup.isOpen
+            onActivated: {
+                if (confirmModal.visible)
+                    confirmModal.visible = false;
+                else if (installModal.visible)
+                    installModal.visible = false;
+                else
+                    helperPopup.close();
+            }
+        }
+
+        function reposition() {
+            const win = buttonBackground.Window.window;
+            const p = buttonBackground.mapToItem(null, 0, 0);
+            const ax = (win ? win.x : 0) + p.x;
+            const ay = (win ? win.y : 0) + p.y;
+            const position = root.bar.barPosition ?? "top";
+            if (position === "left" || position === "right") {
+                popupX = position === "left"
+                    ? ax + buttonBackground.width + visualMargin
+                    : ax - totalWidth - visualMargin;
+                popupY = ay + (buttonBackground.height - totalHeight) / 2;
+            } else {
+                popupX = ax + (buttonBackground.width - totalWidth) / 2;
+                popupY = position === "top"
+                    ? ay + buttonBackground.height + visualMargin
+                    : ay - totalHeight - visualMargin;
+            }
+            popupX = Math.max(visualMargin, Math.min(popupX, screen.width - totalWidth - visualMargin));
+            popupY = Math.max(visualMargin, Math.min(popupY, screen.height - totalHeight - visualMargin));
+        }
+
+        function open() {
+            if (isOpen)
+                return;
+            if (typeof Visibilities.registerBarPopup === "function")
+                Visibilities.registerBarPopup(helperPopup);
+            isOpen = true;
+            reposition();
+            visible = true;
+        }
+
+        function close() {
+            if (typeof Visibilities.unregisterBarPopup === "function")
+                Visibilities.unregisterBarPopup(helperPopup);
+            isOpen = false;
+            visible = false;
+        }
+
+        function toggle() {
+            if (isOpen)
+                close();
+            else
+                open();
+        }
+
+        onTotalWidthChanged: { if (visible) reposition(); }
+        onTotalHeightChanged: { if (visible) reposition(); }
+        Component.onDestruction: {
+            if (typeof Visibilities.unregisterBarPopup === "function")
+                Visibilities.unregisterBarPopup(helperPopup);
+        }
+
         // The scroll gutter widens the popup instead of narrowing its content
         readonly property real baseWidth: Math.max(280, Math.min(336, (root.bar?.screen?.width ?? 384) - 48 - root.scrollGutter))
         readonly property real neededHeight: Math.max(scrollArea.contentHeight,
             installModal.visible ? installColumn.implicitHeight + 40 : 0,
             confirmModal.visible ? confirmColumn.implicitHeight + 40 : 0)
-        contentWidth: baseWidth + (scrollArea.overflowing ? root.scrollGutter : 0)
-        contentHeight: Math.ceil(Math.min(neededHeight, root.popupSpace)) + popupPadding * 2
-        clickThroughMargins: root.nativePopupDismissal
-        grabFocus: false
-        closeOnFocusLost: !root.nativePopupDismissal && KdeConnectService.operation !== "choose_files"
-        // BarPopup.open() enables Ambxst's backdrop grab after mapping.
-        // Use compositor dismissal instead, keeping the bar interactive.
-        onFocusActiveChanged: {
-            if (root.nativePopupDismissal && focusActive)
-                focusActive = false;
-        }
+        property int contentWidth: baseWidth + (scrollArea.overflowing ? root.scrollGutter : 0)
+        property int contentHeight: Math.ceil(Math.min(neededHeight, root.popupSpace)) + popupPadding * 2
         onIsOpenChanged: {
             if (isOpen)
                 Qt.callLater(() => refreshButton.forceActiveFocus());
@@ -492,6 +602,7 @@ Item {
 
         Flickable {
             id: scrollArea
+            parent: popupContentContainer
             anchors.fill: parent
             readonly property bool overflowing: contentHeight > height + 1
             contentWidth: width
@@ -958,6 +1069,7 @@ Item {
 
         Item {
             id: installModal
+            parent: popupContentContainer
             anchors.fill: parent
             z: 20
             visible: false
@@ -1113,6 +1225,7 @@ Item {
 
         Item {
             id: confirmModal
+            parent: popupContentContainer
             anchors.fill: parent
             z: 21
             visible: false

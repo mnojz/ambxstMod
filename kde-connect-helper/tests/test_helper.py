@@ -246,7 +246,7 @@ class PackageIntegrationTests(unittest.TestCase):
         self.assertIn('variant: root.popupOpen ? "primary" : "bg"', widget)
         self.assertIn('color: Styling.srItem("overprimary")', widget)
         self.assertIn("opacity: root.popupOpen ? 0 : (root.isHovered ? 0.25 : 0)", widget)
-        self.assertIn("anchorItem: buttonBackground", widget)
+        self.assertIn("buttonBackground.mapToItem(null, 0, 0)", widget)
         self.assertIn("function getBatteryColor()", widget)
         self.assertIn("id: progressCanvas", widget)
         self.assertIn("id: centralIcon", widget)
