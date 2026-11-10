@@ -1,0 +1,40 @@
+{
+    "manifestVersion": 1,
+    "id": "mnojz.pacdeck",
+    "name": "pacDeck",
+    "version": "2.0.0",
+    "description": "Arch and AUR package manager.",
+    "compatibility": {
+        "api": 1,
+        "ambxst": ">=1.3.0 <1.4.0"
+    },
+    "settings": {
+        "schema": "settings.json"
+    },
+    "operations": [
+        {
+            "type": "overlay",
+            "source": "overlays/modules/widgets/pacdeck/PacDeck.qml",
+            "target": "modules/widgets/pacdeck/PacDeck.qml"
+        },
+        {
+            "type": "overlay",
+            "source": "overlays/modules/services/PacDeckService.qml",
+            "target": "modules/services/PacDeckService.qml"
+        },
+        {
+            "type": "overlay",
+            "source": "overlays/scripts/pacdeck_backend.py",
+            "target": "scripts/pacdeck_backend.py"
+        },
+        {
+            "type": "patch",
+            "source": "patches/integration.patch"
+        }
+    ],
+    "commands": [
+        "python3",
+        "pacman",
+        "sudo"
+    ]
+}

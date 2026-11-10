@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Axenide/Ambxst/dev/docs/mods/settings.schema.json",
+  "version": 1,
+  "fields": [
+    {
+      "key": "aurHelper",
+      "label": "AUR helper",
+      "description": "Automatically detect paru or yay, or prefer an installed helper.",
+      "type": "enum",
+      "options": [
+        {
+          "label": "Automatic",
+          "value": "auto"
+        },
+        {
+          "label": "paru",
+          "value": "paru"
+        },
+        {
+          "label": "yay",
+          "value": "yay"
+        }
+      ],
+      "default": "auto"
+    }
+  ]
+}
