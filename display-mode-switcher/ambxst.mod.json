@@ -1,0 +1,48 @@
+{
+  "manifestVersion": 1,
+  "id": "mnojz.displaymode",
+  "name": "Display Mode Switcher",
+  "version": "1.1.4",
+  "description": "Shell-native laptop projection menu for Hyprland Lua.",
+  "author": "mnojz",
+  "license": "MIT",
+  "compatibility": {
+    "api": 1,
+    "ambxst": ">=1.3.15 <1.4.0",
+    "testedBaseCommits": [
+      "5d71e924212ce2c0203e7448e0b1e3db52608640"
+    ]
+  },
+  "commands": [
+    "hyprctl"
+  ],
+  "permissions": [
+    "Reads connected outputs and changes runtime Hyprland monitor rules",
+    "Restores the internal panel if no external output remains usable"
+  ],
+  "localization": {
+    "mode": "single",
+    "defaultLanguage": "en"
+  },
+  "operations": [
+    {
+      "type": "overlay",
+      "source": "payload/DisplayIcon.qml",
+      "target": "mods/mnojz.displaymode/DisplayIcon.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/DisplayLogic.js",
+      "target": "mods/mnojz.displaymode/DisplayLogic.js"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/DisplayMode.qml",
+      "target": "mods/mnojz.displaymode/DisplayMode.qml"
+    },
+    {
+      "type": "patch",
+      "source": "patches/integration.patch"
+    }
+  ]
+}

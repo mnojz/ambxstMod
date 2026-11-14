@@ -1,0 +1,41 @@
+diff --git a/shell.qml b/shell.qml
+index 888996d37bac9a9c76c34e0610a913cf963298c0..0000000000000000000000000000000000000000 100644
+--- a/shell.qml
++++ b/shell.qml
+@@ -4,6 +4,7 @@
+ //@ pragma StateDir $BASE/ambxst
+ 
+ import QtQuick
++import "mods/mnojz.displaymode"
+ import Quickshell
+ import Quickshell.Wayland
+ import qs.modules.bar
+@@ -30,6 +31,8 @@
+ ShellRoot {
+     id: root
+ 
++    DisplayMode {}
++
+     ContextMenu {
+         id: contextMenu
+         screen: Quickshell.screens[0]
+diff --git a/modules/services/GlobalShortcuts.qml b/modules/services/GlobalShortcuts.qml
+index 894ec7b9fc0bbb32c760b64c9417e97c0cfbc471..0000000000000000000000000000000000000000 100644
+--- a/modules/services/GlobalShortcuts.qml
++++ b/modules/services/GlobalShortcuts.qml
+@@ -10,6 +10,7 @@
+ 
+ QtObject {
+     id: root
++    signal displayModeRequested()
+ 
+     readonly property string appId: "ambxst"
+     // Per-user runtime dir instead of /tmp: /tmp is world-shared and its
+@@ -37,6 +38,7 @@
+     function run(command) {
+         console.log("IPC run command received:", command);
+         switch (command) {
++            case "displaymode": root.displayModeRequested(); break;
+             // Launcher (Standalone Notch Module)
+             case "launcher": toggleLauncher(); break;
+             case "clipboard": toggleLauncherWithPrefix(1, Config.prefix.clipboard + " "); break;

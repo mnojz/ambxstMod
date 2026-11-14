@@ -19,3 +19,7 @@ A collection of mods for [Ambxst](https://github.com/Axenide/Ambxst), a modular 
 * **Description**: Status bar control and actions for paired KDE Connect devices.
 * **Features**: Device status, battery levels, ping/ring actions, file/text sharing via desktop portal, and user autostart controls.
 
+
+### 4. [Display Mode Switcher (`display-mode-switcher`)](./display-mode-switcher)
+* **ID**: `mnojz.displaymode`
+* **Description**: Shell-native four-mode laptop projection menu for Hyprland Lua, with target selection, verified asynchronous switching, and unplug recovery.
