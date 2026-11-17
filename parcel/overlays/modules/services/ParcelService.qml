@@ -6,8 +6,8 @@ import Quickshell.Io
 
 Singleton {
     id: root
-    readonly property string modId: "mnojz.pacdeck"
-    readonly property string backendPath: decodeURIComponent(Qt.resolvedUrl("../../scripts/pacdeck_backend.py").toString().replace("file://", ""))
+    readonly property string modId: "mnojz.parcel"
+    readonly property string backendPath: decodeURIComponent(Qt.resolvedUrl("../../scripts/parcel_backend.py").toString().replace("file://", ""))
     property string preferredHelper: "auto"
     property string helper: ""
     property var helpers: []
@@ -17,6 +17,8 @@ Singleton {
     property int selected: 0
     readonly property var selectedPackage: results[selected] ?? null
     property var details: ({})
+    property var packageMetadata: ({})
+    property string detailsError: ""
     property string query: ""
     property string status: "Detecting package tools…"
     property bool searching: false
@@ -31,6 +33,9 @@ Singleton {
     readonly property bool busy: job !== 0
     property string phase: ""
     property real progress: -1
+    property int completedPackages: 0
+    property int totalPackages: 0
+    property string progressUnit: "packages"
     property bool cancellable: false
     property bool stopRequested: false
     property string logs: ""
@@ -38,6 +43,76 @@ Singleton {
     property bool failed: false
     property var challenge: null
     property var prompt: null
+
+    property var viewAttention: ({})
+    readonly property bool hasAttentiveView: Object.values(viewAttention).some(focused => focused)
+    property string lastNotifiedChallenge: ""
+    property int authenticationNotificationId: 0
+
+    function setViewAttention(key, focused) {
+        if (viewAttention[key] === focused)
+            return;
+        viewAttention = Object.assign({}, viewAttention, {
+            [key]: focused
+        });
+    }
+    function removeViewAttention(key) {
+        const views = Object.assign({}, viewAttention);
+        delete views[key];
+        viewAttention = views;
+    }
+    function clearAuthenticationNotification() {
+        if (!authenticationNotificationId)
+            return;
+        const id = authenticationNotificationId;
+        authenticationNotificationId = 0;
+        Notifications.discardNotification(id);
+    }
+    function notifyAuthentication() {
+        if (challenge?.kind !== "password" || hasAttentiveView || lastNotifiedChallenge === String(challenge.id))
+            return;
+        const challengeId = String(challenge.id);
+        const notification = Notifications.notifyInternal({
+            appName: "Parcel",
+            appIcon: "system-software-install",
+            summary: "Password needed to continue",
+            body: "Your package operation is paused. Open Parcel to authenticate.",
+            urgency: "normal",
+            replaceKey: "parcel-authentication",
+            expireTimeout: 10000,
+            actions: [
+                {
+                    identifier: "open",
+                    text: "Open Parcel"
+                }
+            ],
+            actionHandlers: {
+                open: function () {
+                    if (root.challenge?.kind === "password" && String(root.challenge.id) === challengeId)
+                        Visibilities.setActiveModule("parcel");
+                }
+            }
+        });
+        if (notification) {
+            lastNotifiedChallenge = challengeId;
+            authenticationNotificationId = notification.id;
+        }
+    }
+    onChallengeChanged: {
+        clearAuthenticationNotification();
+        authenticationAttention.restart();
+    }
+    onHasAttentiveViewChanged: {
+        if (hasAttentiveView)
+            clearAuthenticationNotification();
+        else
+            authenticationAttention.restart();
+    }
+    Timer {
+        id: authenticationAttention
+        interval: 350
+        onTriggered: root.notifyAuthentication()
+    }
 
     function send(command, data) {
         const request = Object.assign({}, data ?? ({}), {
@@ -79,8 +154,19 @@ Singleton {
         });
     }
 
+    function rememberMetadata(rows) {
+        const cached = Object.assign({}, packageMetadata);
+        for (const row of rows) {
+            if (row.details && Object.keys(row.details).length)
+                cached[row.name] = row.details;
+        }
+        packageMetadata = cached;
+    }
+
     function loadDetails() {
-        details = ({});
+        detailsDebounce.stop();
+        detailsError = "";
+        details = selectedPackage ? (packageMetadata[selectedPackage.name] ?? ({})) : ({});
         if (selectedPackage)
             detailsId = send("details", {
                 name: selectedPackage.name,
@@ -98,6 +184,9 @@ Singleton {
         challenge = null;
         prompt = null;
         progress = -1;
+        completedPackages = 0;
+        totalPackages = 0;
+        progressUnit = "packages";
         stopRequested = false;
         phase = "Starting…";
         job = send("transaction", Object.assign({}, action, {
@@ -154,6 +243,7 @@ Singleton {
             scanning = false;
             helper = event.helper;
             helpers = event.helpers;
+            rememberMetadata(event.rows);
             installed = event.rows;
             if (!query.trim()) {
                 results = installed;
@@ -169,6 +259,7 @@ Singleton {
         case "search":
             if (event.id !== searchId)
                 return;
+            rememberMetadata(event.rows);
             results = event.rows;
             selected = Math.min(selected, Math.max(0, results.length - 1));
             searching = !event.done;
@@ -176,14 +267,27 @@ Singleton {
             detailsDebounce.restart();
             return;
         case "details":
-            if (event.id === detailsId && event.name === selectedPackage?.name)
-                details = event.details;
+            if (event.id === detailsId && event.name === selectedPackage?.name) {
+                if (Object.keys(event.details).length) {
+                    rememberMetadata([
+                        {
+                            name: event.name,
+                            details: event.details
+                        }
+                    ]);
+                    details = event.details;
+                } else {
+                    detailsError = event.error || "Package details are unavailable.";
+                }
+            }
             return;
         case "error":
             if (event.id === job) {
                 failed = true;
                 outcome = event.message;
                 job = 0;
+            } else if (event.id === detailsId) {
+                detailsError = event.message;
             } else if (event.id === searchId) {
                 searching = false;
                 status = event.message;
@@ -198,14 +302,25 @@ Singleton {
         switch (event.event) {
         case "phase":
             phase = event.label;
-            progress = event.progress === null ? -1 : event.progress / 100;
+            totalPackages = Math.max(0, event.total ?? 0);
+            completedPackages = Math.max(0, Math.min(totalPackages, event.completed ?? 0));
+            progressUnit = event.unit ?? "packages";
+            progress = totalPackages > 0 ? completedPackages / totalPackages : -1;
             cancellable = !!event.cancellable;
             return;
         case "log":
             logs = (logs + event.text).slice(-64000);
             return;
         case "challenge":
-            challenge = event;
+            if (event.kind === "review") {
+                send("answer", {
+                    job: job,
+                    challenge: event.id,
+                    value: true
+                });
+            } else {
+                challenge = event;
+            }
             return;
         case "challenge_clear":
             if (challenge?.id === event.id)

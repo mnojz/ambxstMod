@@ -4,14 +4,14 @@ index ee97b092..c7d71605 100644
 +++ w/modules/services/Visibilities.qml
 @@ -207,2 +207,3 @@ Singleton {
              property bool launcher: false
-+            property bool pacDeck: false
++            property bool parcel: false
              property bool dashboard: false
 @@ -215,2 +216,7 @@ Singleton {
  
-+    // mnojz.pacdeck: registers the pacDeck module without editing
++    // mnojz.parcel: registers the parcel module without editing
 +    // the moduleNames literal — the array is mutated in place, so this composes
 +    // with any other mod that appends to the same literal.
-+    Component.onCompleted: moduleNames.push("pacDeck")
++    Component.onCompleted: moduleNames.push("parcel")
 +
      function clearAll() {
 diff --git i/modules/services/GlobalShortcuts.qml w/modules/services/GlobalShortcuts.qml
@@ -20,7 +20,7 @@ index ee1ce50f..1ba67075 100644
 +++ w/modules/services/GlobalShortcuts.qml
 @@ -59,2 +59,3 @@ QtObject {
              case "powermenu": toggleSimpleModule("powermenu"); break;
-+            case "pacDeck": toggleSimpleModule("pacDeck"); break;
++            case "parcel": toggleSimpleModule("parcel"); break;
              case "tools": toggleSimpleModule("tools"); break;
 diff --git i/shell.qml w/shell.qml
 index 888996d3..fec3cb92 100644
@@ -28,16 +28,16 @@ index 888996d3..fec3cb92 100644
 +++ w/shell.qml
 @@ -17,2 +17,3 @@ import qs.modules.widgets.presets
  import qs.modules.services
-+import qs.modules.widgets.pacdeck
++import qs.modules.widgets.parcel
  import qs.modules.corners
 @@ -166,2 +167,13 @@ ShellRoot {
  
-+    // One overlay per screen, shown through the pacDeck visibility module.
++    // One overlay per screen, shown through the parcel visibility module.
 +    // Hidden overlays stay unmapped.
 +    Variants {
 +        model: Quickshell.screens
 +
-+        PacDeck {
++        Parcel {
 +            required property ShellScreen modelData
 +            screen: modelData
 +        }

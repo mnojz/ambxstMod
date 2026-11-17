@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pacDeck's per-user JSON bridge, PTY runner, and transient sudo askpass bridge."""
+"""Parcel's per-user JSON bridge, PTY runner, and transient sudo askpass bridge."""
 from __future__ import annotations
 
 import concurrent.futures
@@ -27,6 +27,7 @@ import time
 HELPERS = ("paru", "yay")
 NAME = re.compile(r"^[a-zA-Z0-9@_+][a-zA-Z0-9@._+:-]{0,199}$")
 ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+PACKAGE_COUNT = re.compile(r"\(\s*(\d+)\s*/\s*(\d+)\s*\)")
 PERCENT = re.compile(r"(?<!\d)(\d{1,3})(?:\.\d+)?%")
 PROMPT = re.compile(r"(?:\[[YyNn]/[YyNn]\]|[?:>]\s*$)")
 MAX_OUTPUT = 2 * 1024 * 1024
@@ -72,6 +73,15 @@ def parse_info(text):
     return result
 
 
+def parse_info_many(text):
+    records = {}
+    for block in re.split(r"\n\s*\n", text):
+        info = parse_info(block)
+        if info.get("Name"):
+            records.setdefault(info["Name"], info)
+    return records
+
+
 def parse_updates(text):
     updates = {}
     for line in text.splitlines():
@@ -114,9 +124,10 @@ class Bridge:
         self.cancellable = False
         self.commit_active = False
         self.phase_label = "Preparing"
+        self.reset_progress()
         self.token = secrets.token_urlsafe(32)
         runtime = os.environ.get("XDG_RUNTIME_DIR")
-        self.runtime = Path(tempfile.mkdtemp(prefix="pd-", dir=runtime if runtime and os.access(runtime, os.W_OK) else None))
+        self.runtime = Path(tempfile.mkdtemp(prefix="parcel-", dir=runtime if runtime and os.access(runtime, os.W_OK) else None))
         self.server = socket.socket(socket.AF_UNIX)
         self.socket_path = self.runtime / "auth.sock"
         try:
@@ -182,6 +193,23 @@ class Bridge:
             parts = line.split()
             if len(parts) >= 2:
                 rows.append(dict(name=parts[0], version=parts[1], repo="aur" if parts[0] in foreign else "installed", installed=True, description=""))
+        # Batch local database reads: no per-row processes or AUR network queries.
+        # Bounded batches keep query output below the bridge's output limit.
+        for offset in range(0, len(rows), 256):
+            batch = rows[offset:offset + 256]
+            names = [row["name"] for row in batch]
+            _, local_text, _ = self.read_command(["pacman", "-Qi", "--color", "never", "--", *names], stop)
+            metadata = parse_info_many(local_text)
+            official = [name for name in names if name not in foreign]
+            if official:
+                _, sync_text, _ = self.read_command(["pacman", "-Si", "--color", "never", "--", *official], stop)
+                for name, info in parse_info_many(sync_text).items():
+                    metadata[name] = dict(metadata.get(name, {}), **info)
+            for row in batch:
+                info = metadata.get(row["name"], {})
+                row["repo"] = "aur" if row["name"] in foreign else info.get("Repository", "local")
+                row["description"] = info.get("Description", "")
+                row["details"] = dict(info, Repository=row["repo"]) if info else {}
         with self.lock:
             self.installed = set(installed_text.splitlines())
             self.installed_rows = rank(rows, "")
@@ -274,15 +302,16 @@ class Bridge:
             target.write_text(content)
             target.chmod(0o700)
         env.update(PATH=str(self.runtime) + os.pathsep + env.get("PATH", ""),
-                   SUDO_ASKPASS=str(self.runtime / "askpass"), PACDECK_SOCKET=str(self.socket_path),
-                   PACDECK_TOKEN=self.token, PAGER="cat", GIT_PAGER="cat", PARU_PAGER="cat",
-                   EDITOR=str(self.runtime / "review"), VISUAL=str(self.runtime / "review"))
+                   SUDO_ASKPASS=str(self.runtime / "askpass"), PARCEL_SOCKET=str(self.socket_path),
+                   PARCEL_TOKEN=self.token, PAGER="cat", GIT_PAGER="cat", PARU_PAGER="cat",
+                   EDITOR=str(self.runtime / "review"), VISUAL=str(self.runtime / "review"),
+                   COLUMNS="160", LINES="30")
         return env
 
     def start_transaction(self, request):
         try:
             if os.geteuid() == 0:
-                raise ValueError("Run pacDeck as your desktop user, not root")
+                raise ValueError("Run Parcel as your desktop user, not root")
             if request.get("confirmed") is not True:
                 raise ValueError("Confirm the transaction first")
             operation = request.get("operation")
@@ -347,7 +376,7 @@ class Bridge:
             return
         self.emit("phase", job=self.job, label="Installing build dependencies", progress=None, cancellable=False)
         self.run_pty([str(self.runtime / "sudo"), executable("pacman"), "-S", "--needed", "--noconfirm", "base-devel", "git"], env)
-        with tempfile.TemporaryDirectory(prefix="pacdeck-build-") as temp:
+        with tempfile.TemporaryDirectory(prefix="parcel-build-") as temp:
             checkout = Path(temp) / helper
             self.run_pty([executable("git"), "clone", "--", f"https://aur.archlinux.org/{helper}.git", str(checkout)], env, safe=True)
             files = []
@@ -371,7 +400,7 @@ class Bridge:
         attrs = termios.tcgetattr(slave)
         attrs[3] &= ~(termios.ECHO | termios.ECHONL)
         termios.tcsetattr(slave, termios.TCSANOW, attrs)
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 160, 0, 0))
         launcher = [sys.executable, str(Path(__file__).resolve()), "--exec", *argv]
         try:
             proc = subprocess.Popen(launcher, stdin=slave, stdout=slave, stderr=slave, cwd=cwd,
@@ -383,6 +412,7 @@ class Bridge:
             self.cancellable = safe
             self.commit_active = False
             self.phase_label = "Preparing"
+            self.reset_progress()
             self.last_prompt = ""
         self.emit("phase", job=self.job, label="Preparing", progress=None, cancellable=safe)
         buffer = ""
@@ -425,30 +455,99 @@ class Bridge:
                 # A live transaction must be reaped; never leave a package tool orphaned.
                 proc.wait()
 
+    def reset_progress(self):
+        self.progress_stage = "preparing"
+        self.progress_completed = 0
+        self.progress_total = 0
+        self.progress_buffer = ""
+        self.last_phase_event = None
+
     def track_progress(self, text):
-        for line in re.split(r"[\r\n]", text):
+        # PTY reads can split a package counter or stage heading mid-line.
+        lines = re.split(r"[\r\n]", self.progress_buffer + text)
+        self.progress_buffer = lines.pop()[-16000:]
+        for line in lines:
             self.track_progress_line(line)
+        if self.progress_buffer:
+            self.track_progress_line(self.progress_buffer)
 
     def track_progress_line(self, text):
-        lower = text.lower()
-        label, cancellable = None, self.cancellable
-        if any(word in lower for word in ("retrieving packages", "downloading", "receiving objects", "cloning into")):
-            label, cancellable = "Downloading", True
+        lower = text.strip().lower()
+        if not lower:
+            return
+        stage, label, safe = self.progress_stage, None, self.cancellable
+        # Keep safety classification separate from measured progress: checks and
+        # hooks remain protected even though their progress is indeterminate.
+        if "running post-transaction" in lower:
+            stage, label, safe = "finalizing", "Finalizing", False
+            self.commit_active = True
+        elif "checking keys in keyring" in lower:
+            stage, label, safe = "keys", "Verifying package signatures", False
+            self.commit_active = True
+        elif "checking package integrity" in lower:
+            stage, label, safe = "integrity", "Verifying package integrity", False
+            self.commit_active = True
+        elif "loading package files" in lower:
+            stage, label, safe = "loading", "Loading package files", False
+            self.commit_active = True
+        elif "checking for file conflicts" in lower or "checking available disk space" in lower:
+            stage, label, safe = "checking", "Checking installation requirements", False
+            self.commit_active = True
+        elif any(word in lower for word in ("retrieving packages", "downloading", "receiving objects", "cloning into", "retrieving sources")):
+            stage, label, safe = "downloading", "Downloading packages", True
             self.commit_active = False
         elif any(word in lower for word in ("starting build", "compiling", "building ", "making package")):
-            label, cancellable = "Building", True
+            stage, label, safe = "building", "Building", True
             self.commit_active = False
-        elif any(word in lower for word in ("installing ", "upgrading ", "removing ", "checking ", "running post-transaction", "processing package changes")):
-            label, cancellable = "Applying package changes", False
+        elif any(word in lower for word in ("creating package", "compressing package", "entering fakeroot")):
+            stage, label, safe = "packaging", "Packaging build", True
+            self.commit_active = False
+        elif any(word in lower for word in ("cleaning up", "removing unneeded", "cleaning build")):
+            stage, label, safe = "cleanup", "Cleaning up", not self.commit_active
+        elif any(word in lower for word in ("installing ", "upgrading ", "removing ", "processing package changes")):
+            stage, label, safe = "applying", "Applying package changes", False
             self.commit_active = True
-        matches = PERCENT.findall(text)
-        progress = min(100, int(matches[-1])) if matches else None
-        if label or progress is not None:
-            self.cancellable = cancellable
-            self.phase_label = label or self.phase_label
-            self.emit("phase", job=self.job, label=self.phase_label, progress=progress, cancellable=cancellable)
-            if self.cancel_requested and cancellable and not self.cancelled:
-                self.cancel({"job": self.job, "confirmed": True})
+        elif "checking " in lower:
+            stage, label, safe = "checking", "Checking packages", False
+            self.commit_active = True
+        elif any(word in lower for word in ("synchronizing package databases", "refreshing ")):
+            stage, label, safe = "syncing", "Refreshing package databases", not self.commit_active
+        elif any(word in lower for word in ("resolving dependencies", "looking for conflicting packages", "checking aur", "searching aur", "querying aur", "fetching", "retrieving information")):
+            stage, label, safe = "resolving", "Resolving packages and dependencies", not self.commit_active
+        elif "starting full system upgrade" in lower:
+            stage, label, safe = "resolving", "Preparing system upgrade", not self.commit_active
+
+        changed_stage = stage != self.progress_stage
+        if changed_stage:
+            self.progress_stage = stage
+            self.progress_completed = self.progress_total = 0
+        if label:
+            self.phase_label = label
+        self.cancellable = safe
+
+        counter = PACKAGE_COUNT.search(text)
+        # Download percentages are bytes for an individual file, never the job.
+        # Only pacman's aggregate Total counter measures downloaded packages.
+        aggregate_download = stage == "downloading" and re.search(r"\btotal\s*\(", lower)
+        if counter and (aggregate_download or stage in ("applying", "finalizing")):
+            current, total = map(int, counter.groups())
+            if 0 <= current <= total and total > 0:
+                percentages = PERCENT.findall(text)
+                complete = aggregate_download or (percentages and int(percentages[-1]) >= 100)
+                completed = current if complete else max(0, current - 1)
+                if self.progress_total != total:
+                    self.progress_total, self.progress_completed = total, 0
+                self.progress_completed = max(self.progress_completed, completed)
+        progress = 100 * self.progress_completed / self.progress_total if self.progress_total else None
+        unit = "tasks" if stage == "finalizing" else "packages"
+        event_key = (stage, self.phase_label, self.progress_completed, self.progress_total, safe)
+        if (label or counter) and event_key != self.last_phase_event:
+            self.last_phase_event = event_key
+            self.emit("phase", job=self.job, stage=stage, label=self.phase_label,
+                      progress=progress, completed=self.progress_completed, total=self.progress_total,
+                      unit=unit, cancellable=safe)
+        if self.cancel_requested and safe and not self.cancelled:
+            self.cancel({"job": self.job, "confirmed": True})
 
     def write_input(self, request):
         text = str(request.get("value", ""))
@@ -462,7 +561,8 @@ class Bridge:
             self.last_prompt = ""
             self.cancellable = False
         self.emit("prompt_clear", job=self.job)
-        self.emit("phase", job=self.job, label="Continuing", progress=None, cancellable=False)
+        self.last_phase_event = None
+        self.emit("phase", job=self.job, label="Continuing", progress=None, completed=0, total=0, cancellable=False)
 
     def cancel(self, request):
         with self.lock:
@@ -557,8 +657,8 @@ class Bridge:
 def ask_client(kind, prompt, content=""):
     with socket.socket(socket.AF_UNIX) as client:
         client.settimeout(620)
-        client.connect(os.environ["PACDECK_SOCKET"])
-        client.sendall((json.dumps(dict(token=os.environ["PACDECK_TOKEN"], kind=kind, prompt=prompt, content=content)) + "\n").encode())
+        client.connect(os.environ["PARCEL_SOCKET"])
+        client.sendall((json.dumps(dict(token=os.environ["PARCEL_TOKEN"], kind=kind, prompt=prompt, content=content)) + "\n").encode())
         return json.loads(client.makefile("rb").readline(65536)).get("value")
 
 
