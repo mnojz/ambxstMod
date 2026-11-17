@@ -5,11 +5,15 @@ function cleanOutput(output) {
         .replace(/\x1b\][^\x07\x1b]*(?:\x1b)?$/g, "")
         // A retained log may start halfway through a sudo OSC session record.
         .replace(/[a-f0-9]{16,};user=[^\r\n\x07\x1b]*(?:\x07|\x1b\\|$)/gi, "")
-        .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+        .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+        // Character-set selection, e.g. ncurses resetting to ASCII with ESC(B.
+        .replace(/\x1b[ -/]+[0-~]/g, "")
+        .replace(/\x1b[ -/]*$/g, "");
 }
 
 function parse(output, transaction) {
     transaction = transaction || {};
+    const operation = transaction.operation;
     const entries = [];
     const positions = {};
     let group = "Preparing";
@@ -20,9 +24,11 @@ function parse(output, transaction) {
     let downloadTotal = 0;
     let downloadCompleted = 0;
     let batch = 0;
+    let buildLines = 0;
+    let buildStatus = "Preparing build";
     const repositoryNames = {core: true, extra: true, multilib: true, "chaotic-aur": true};
     function add(kind, title, detail, key, measurement) {
-        const row = Object.assign({kind: kind, title: title, detail: detail || "", group: group, count: 1, progress: -1, progressLabel: ""}, measurement || {});
+        const row = Object.assign({kind: kind, title: title, detail: detail || "", group: group, count: 1, progress: -1, progressLabel: "", action: operation === "remove" ? "remove" : operation === "upgrade" ? "upgrade" : operation ? "install" : ""}, measurement || {});
         const identity = key ? group + ":" + key : "";
         if (identity && positions[identity] !== undefined) {
             entries[positions[identity]] = row;
@@ -38,7 +44,6 @@ function parse(output, transaction) {
         entries.push(row);
     }
     const name = transaction.name || "package";
-    const operation = transaction.operation;
     if (operation && !transaction.hideStart) {
         group = "";
         const title = operation === "remove" ? "Removing " + name : operation === "upgrade" ? "Synchronizing all packages" : operation === "bootstrap" ? "Installing " + (transaction.helper || "AUR helper") : "Installing " + name;
@@ -46,16 +51,28 @@ function parse(output, transaction) {
         group = "Preparing";
     }
     function completeDependencies(detail) {
-        group = "Installing";
+        group = operation === "upgrade" ? "Upgrading" : "Installing";
         add("progress", "Dependencies", detail, "satisfied:" + batch, {progress: 1, progressLabel: "Already installed"});
     }
     function dependencyDownload() {
         const completed = Math.max(downloadCompleted, Object.keys(downloaded).length);
         const total = downloadTotal || planned;
-        add("progress", "Dependencies", "Downloading", "download-total:" + batch, {
+        add("progress", operation === "upgrade" ? "Update packages" : "Dependencies", operation === "upgrade" ? "Downloading updates" : "Downloading", "download-total:" + batch, {
             progress: total ? Math.min(1, completed / total) : -1,
             progressLabel: total ? Math.min(completed, total) + "/" + total : completed ? completed + " downloaded" : ""
         });
+    }
+    function recordBuild(line) {
+        buildLines++;
+        if (/^\s*(?:cc|gcc|g\+\+|c\+\+|clang\+\+|clang|rustc|ccache|libtool|make(?:\[\d+\])?)(?:\s|:|$)|^\s*\[\s*\d+(?:%|\/\d+)/i.test(line))
+            buildStatus = "Compiling sources";
+        else if (/starting build|compiling|building /i.test(line)) buildStatus = "Compiling sources";
+        else if (/retrieving sources|downloading|receiving objects|cloning into/i.test(line)) buildStatus = "Retrieving build sources";
+        else if (/validating|verifying.*source/i.test(line)) buildStatus = "Verifying build sources";
+        else if (/extracting|patching|starting prepare/i.test(line)) buildStatus = "Preparing build sources";
+        else if (/creating package|compressing package|starting package|entering fakeroot/i.test(line)) buildStatus = "Packaging build";
+        add("build", "Build", buildStatus, "build", {progress: -1, progressLabel: buildLines + " lines"});
+        entries[positions["Building:build"]].count = buildLines;
     }
     const lines = cleanOutput(output).split(/\r\n?|\n/);
     // Only database synchronization output can introduce repository names.
@@ -74,12 +91,15 @@ function parse(output, transaction) {
         const clean = text.replace(/^(?:::|==>+|->)\s*/, "");
         const lower = clean.toLowerCase();
         if (/^(?:(?:all|runtime|build|make|check|package)\s+)*dependencies\s+(?:(?:are|already|have been)\s+)*(?:installed|satisfied|up.to.date)[.!]?$/i.test(clean)) {
-            completeDependencies("Dependencies are already satisfied");
+            if (operation === "remove")
+                add("note", "Dependency check complete", "");
+            else
+                completeDependencies("Dependencies are already satisfied");
             continue;
         }
         const skipped = clean.match(/^(?:warning:\s*)?(\S+)\s+is up to date\s*--\s*skipping[.!]?$/i);
-        if (skipped) {
-            group = "Installing";
+        if (skipped && operation !== "remove") {
+            group = operation === "upgrade" ? "Upgrading" : "Installing";
             alreadyInstalled[skipped[1]] = true;
             const count = Object.keys(alreadyInstalled).length;
             add("progress", "Dependencies", "Already installed", "already-installed", {progress: 1, progressLabel: count + "/" + count});
@@ -111,6 +131,9 @@ function parse(output, transaction) {
         }
         if (repositoryNames[clean] || /^(?:core|extra|multilib)-(?:testing|staging)$/.test(clean))
             continue;
+        // Transaction size summaries describe disk usage, not a transfer.
+        if (/^(?:Total (?:Download|Installed|Removed) Size|Net Upgrade Size)\s*:/i.test(clean))
+            continue;
         const plan = clean.match(/^(?:Packages|Remove)\s*\((\d+)\)/i);
         if (plan) {
             planned = Number(plan[1]);
@@ -119,27 +142,36 @@ function parse(output, transaction) {
         // Wrapped package-plan lines are terminal detail, not activity events.
         if (/^\s+/.test(raw) && /(?:^|\s)[a-zA-Z0-9@_+.:-]+-\d[^\s]*(?:\s|$)/.test(clean) && !/\b(?:KiB|MiB|GiB|installing|upgrading|removing)\b|%/.test(clean))
             continue;
-        if (/retrieving packages|downloading|retrieving sources|receiving objects|cloning into/.test(lower))
-            group = "Downloading";
-        else if (/starting build|making package|compiling|building |entering fakeroot|creating package|compressing package/.test(lower))
+        if (/starting (?:build|prepare|package)\(|making package|compiling|building |entering fakeroot|creating package|compressing package|(?:retrieving|validating|extracting) sources|patching/.test(lower) || /^(?:\[\s*\d+(?:%|\/\d+)|(?:cc|gcc|g\+\+|c\+\+|clang\+\+|clang|rustc|ccache|libtool|make\[\d+\])(?:\s|:|$))/.test(clean))
             group = "Building";
-        else if (/running post-transaction|cleaning up|cleaning build|finalizing/.test(lower))
+        else if (group !== "Building" && /retrieving packages|downloading|receiving objects|cloning into/.test(lower))
+            group = "Downloading";
+        else if (/running post-transaction/.test(lower) || group !== "Building" && /cleaning up|cleaning build|finalizing/.test(lower))
             group = "Finalizing";
-        else if (/processing package changes|\b(?:installing|upgrading|reinstalling|removing)\s+/.test(lower))
-            group = "Installing";
-        else if (/synchronizing package|resolving dependencies|looking for conflicting|starting full system upgrade|searching aur|querying aur|checking.*updates/.test(lower))
+        else if (/^processing package changes|^\(\d+\/\d+\)\s*(?:installing|upgrading|reinstalling|removing)\s+/.test(lower) || group !== "Building" && /^(?:installing|upgrading|reinstalling|removing)\s+/.test(lower))
+            group = operation === "remove" || /\bremoving\s/.test(lower) ? "Removing" : operation === "upgrade" || /\bupgrading\s/.test(lower) ? "Upgrading" : "Installing";
+        else if (group !== "Building" && /synchronizing package|resolving dependencies|looking for conflicting|starting full system upgrade|searching aur|querying aur|checking.*updates/.test(lower))
             group = "Preparing";
+
+        if (group === "Building") {
+            recordBuild(clean);
+            continue;
+        }
 
         const progress = clean.match(/^\((\d+)\/(\d+)\)\s*(installing|upgrading|reinstalling|removing)\s+(\S+)/i);
         if (progress) {
-            group = "Installing";
+            const verb = progress[3].toLowerCase();
+            const removing = verb === "removing";
+            const upgrading = verb === "upgrading";
+            group = removing ? "Removing" : operation === "upgrade" ? "Upgrading" : "Installing";
             const percent = clean.match(/(\d+(?:\.\d+)?)%/);
             const current = Number(progress[1]), total = Number(progress[2]);
             const completed = percent && Number(percent[1]) >= 100 ? current : Math.max(0, current - 1);
             const key = group + ":install-total:" + batch;
             const previous = positions[key] !== undefined ? entries[positions[key]] : null;
             const fraction = Math.max(previous ? previous.progress : 0, total ? completed / total : 0);
-            add("progress", "Dependencies", progress[3].toLowerCase() === "removing" ? "Removing" : "Installing", "install-total:" + batch, {
+            add("progress", removing || upgrading || operation === "upgrade" ? "Packages" : "Dependencies", removing ? "Removing packages" : upgrading ? "Updating packages" : operation === "upgrade" ? "Installing new packages" : verb === "reinstalling" ? "Reinstalling" : "Installing", "install-total:" + batch, {
+                action: removing ? "remove" : upgrading || operation === "upgrade" ? "upgrade" : "install",
                 progress: Math.min(1, fraction),
                 progressLabel: Math.round(fraction * total) + "/" + total
             });
@@ -155,8 +187,10 @@ function parse(output, transaction) {
         }
         const percentages = clean.match(/\d+(?:\.\d+)?%/g);
         const percent = percentages ? Math.min(100, Number(percentages[percentages.length - 1].slice(0, -1))) : -1;
-        const transfer = clean.match(/^(\S+)\s+.*\b(?:B|KiB|MiB|GiB)\b/);
-        const archive = clean.match(/^(?:Downloading\s+)?['"]?([^\s'"]+?(?:\.pkg\.tar\.(?:zst|xz|gz)|\.tar\.(?:gz|xz|bz2|zst)))['"]?/i);
+        const transferLine = clean.match(/^(\S+)\s+\d+(?:\.\d+)?\s*(?:B|KiB|MiB|GiB)\b/);
+        const transfer = transferLine && (percent >= 0 || /\b(?:B|KiB|MiB|GiB)\/s\b|\b\d{1,2}:\d{2}\b/.test(clean)) ? transferLine : null;
+        const archiveLine = clean.match(/^(?:Downloading\s+)?['"]?([^\s'"]+?(?:\.pkg\.tar\.(?:zst|xz|gz)|\.tar\.(?:gz|xz|bz2|zst)))['"]?/i);
+        const archive = archiveLine && (percent >= 0 || /^Downloading\s+/i.test(clean)) ? archiveLine : null;
         if (transfer || archive) {
             const name = archive ? archive[1] : transfer[1];
             if (!archive && (syncing || repositoryNames[name] || /\.(?:db|files)$/.test(name))) {
@@ -190,19 +224,17 @@ function parse(output, transaction) {
             add("success", clean, "");
             continue;
         }
-        if (group === "Building" && /^(?:\[\s*\d+(?:%|\/\d+)|(?:cc|gcc|g\+\+|c\+\+|clang\+\+|clang|rustc|ccache|libtool|make\[\d+\])(?:\s|:|$)|\s*(?:CC|CXX|LINK|AR)\s)/.test(clean)) {
-            const key = group + ":compiler";
-            const old = positions[key] !== undefined ? entries[positions[key]] : null;
-            const count = old ? old.count + 1 : 1;
-            add("build", "Compiling sources", count + " build output lines · available in Raw", "compiler");
-            entries[positions[key]].count = count;
-            continue;
-        }
         // A redraw without a package identity belongs in the status strip/raw view.
         if (/^(?:\d+(?:\.\d+)?%|\[.*\]\s*\d+%|remote: (?:Counting|Compressing|Enumerating)|Receiving objects:|Resolving deltas:)/i.test(clean))
             continue;
         const readable = clean.replace(/\s*\[[#=\->\s]+\]\s*\d+%.*$/, "").replace(/\.{3}$/, "");
         add(/^\s*[$+]\s/.test(text) ? "command" : "note", readable, "");
+    }
+    if (["done", "failed", "cancelled"].includes(transaction.state) && positions["Building:build"] !== undefined) {
+        const build = entries[positions["Building:build"]];
+        build.progress = transaction.state === "done" ? 1 : 0;
+        build.progressLabel = transaction.state === "done" ? "Complete" : transaction.state === "cancelled" ? "Cancelled" : "Failed";
+        build.detail = buildLines + " build output lines in Raw";
     }
     if (transaction.state === "done") {
         // Confirmed success closes any terminal bars whose final redraw was omitted.
@@ -214,10 +246,10 @@ function parse(output, transaction) {
             }
         }
         group = "";
-        add("done", "Done", operation === "remove" ? name + " removed successfully." : operation === "upgrade" ? "All packages synchronized successfully." : operation === "bootstrap" ? "AUR helper installed successfully." : name + " installed successfully.");
+        add("done", operation === "remove" ? "Removed" : operation === "upgrade" ? "Updated" : "Installed", operation === "remove" ? name + " removed successfully." : operation === "upgrade" ? "All packages synchronized successfully." : operation === "bootstrap" ? "AUR helper installed successfully." : name + " installed successfully.");
     } else if (transaction.state === "failed" || transaction.state === "cancelled") {
         group = "";
-        add(transaction.state === "failed" ? "error" : "note", transaction.state === "failed" ? "Operation failed" : "Cancelled", transaction.message || "");
+        add(transaction.state === "failed" ? "error" : "note", transaction.state === "failed" ? operation === "remove" ? "Removal failed" : operation === "upgrade" ? "Update failed" : "Operation failed" : "Cancelled", transaction.message || "");
     }
     return entries;
 }

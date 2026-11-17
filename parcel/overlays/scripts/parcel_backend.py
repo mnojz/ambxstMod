@@ -26,9 +26,9 @@ import time
 
 HELPERS = ("paru", "yay")
 NAME = re.compile(r"^[a-zA-Z0-9@_+][a-zA-Z0-9@._+:-]{0,199}$")
-ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[ -/]+[0-~])")
 PACKAGE_PLAN = re.compile(r"^\s*(?:Packages|Remove)\s*\((\d+)\)", re.I)
-INCOMPLETE_ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*|\][^\x07\x1b]*(?:\x1b)?)?$")
+INCOMPLETE_ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*|\][^\x07\x1b]*(?:\x1b)?|[ -/]+)?$")
 PACKAGE_COUNT = re.compile(r"\(\s*(\d+)\s*/\s*(\d+)\s*\)")
 PERCENT = re.compile(r"(?<!\d)(\d{1,3})(?:\.\d+)?%")
 PROMPT = re.compile(r"(?:\[[YyNn]/[YyNn]\]|[?:>]\s*$)")

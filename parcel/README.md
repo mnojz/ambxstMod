@@ -73,12 +73,14 @@ progress updates, and highlights warnings and errors with your shell palette.
 Repository downloads update one progress bar per repository. Dependencies use a
 single completed/total bar for each download or installation batch. Already installed
 dependencies show a full bar. Each operation starts with its package name and ends
-with **Done** only after confirmed success; routine confirmation chatter is hidden.
-Compiler chatter is summarized. Choose **Raw** for the original output; long raw lines
+with **Installed** (green), **Removed** (red), or **Updated** (blue) after confirmed
+success. Each operation uses matching messages and icons; routine confirmation chatter is hidden.
+Build output stays in one updating entry, including source preparation, compilation,
+and packaging. Warnings and errors remain visible. Choose **Raw** for the original output; long raw lines
 scroll horizontally with a trackpad or **Shift + mouse wheel**.
 The trash icon clears both log views without stopping an active operation.
 Automatic following pauses when you scroll back. Logs prefer JetBrains Mono Nerd Font,
-then another installed Nerd Font.
+then another installed Nerd Font. Log icons use glyphs from that same font.
 
 ## Keyboard shortcuts
 

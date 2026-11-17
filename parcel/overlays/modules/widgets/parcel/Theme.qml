@@ -38,6 +38,7 @@ QtObject {
     readonly property int searchSize: 16
     readonly property real nameSize: 13.5
     readonly property int metaSize: 12
+    readonly property int logCompletionSize: 20
     readonly property int logSize: 14
     // About 75% of the former 96-column, 11px log canvas.
     readonly property int logColumns: 56
@@ -78,6 +79,30 @@ QtObject {
             return ShellTheme.Icons.shieldCheck;
         default:
             return ShellTheme.Icons.info;
+        }
+    }
+    // Font Awesome glyphs included by Nerd Fonts; never mix icon-font codepoints.
+    function logIcon(name) {
+        const nerd = /nerd|\bNFM\b/i.test(logFont);
+        switch (name) {
+        case "close":
+            return nerd ? "\uf00d" : "x";
+        case "warning":
+            return nerd ? "\uf071" : "!";
+        case "key":
+            return nerd ? "\uf00c" : "+";
+        case "install":
+            return nerd ? "\uf019" : "+";
+        case "uninstall":
+            return nerd ? "\uf1f8" : "-";
+        case "sync":
+            return nerd ? "\uf021" : "~";
+        case "build":
+            return nerd ? "\uf0ad" : "*";
+        case "log":
+            return nerd ? "\uf120" : ">";
+        default:
+            return nerd ? "\uf129" : "i";
         }
     }
     function repositoryLabel(repository) {

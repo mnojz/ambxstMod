@@ -10,6 +10,9 @@ Rectangle {
     signal clearRequested
     property string logs: ""
     property var transaction: ({})
+    readonly property bool removing: transaction.operation === "remove"
+    readonly property bool updating: transaction.operation === "upgrade"
+    readonly property color transactionColor: removing ? Theme.logError : updating ? Theme.logCommand : Theme.logSuccess
     property string displayText: ""
     property int columns: Theme.logColumns
     property int lineCount: 0
@@ -55,7 +58,7 @@ Rectangle {
         if (/\b(warning|warn|deprecated)\b/i.test(line))
             return span(line, Theme.logWarning, false);
         if (/\b(successfully|completed|finished|up.to.date)\b/i.test(line))
-            return span(line, Theme.logSuccess, false);
+            return span(line, root.transactionColor, false);
         if (/^\s*(::|==>|->)/.test(line))
             return span(line, Theme.logCommand, true);
         const token = /https?:\/\/[^\s]+|(?:\.?\.?\/)[^\s]+|"[^"]*"|'[^']*'|--[a-zA-Z][\w-]*(?:=[^\s]+)?|\b\d+(?:\.\d+)?(?:%|\/\d+|\b)|^\s*[$+>]\s*/g;
@@ -63,11 +66,47 @@ Rectangle {
         while ((match = token.exec(line)) !== null) {
             html += escapeHtml(line.slice(end, match.index));
             const value = match[0];
-            const color = /^['"]/.test(value) ? Theme.logWarning : /^--/.test(value) ? Theme.logSuccess : /^\s*[$+>]/.test(value) ? Theme.logCommand : Theme.logValue;
+            const color = /^['"]/.test(value) ? Theme.logWarning : /^--/.test(value) ? root.transactionColor : /^\s*[$+>]/.test(value) ? Theme.logCommand : Theme.logValue;
             html += span(value, color, false);
             end = token.lastIndex;
         }
         return html + escapeHtml(line.slice(end));
+    }
+    function activityTone(row) {
+        if (row.kind === "error")
+            return Theme.logError;
+        if (row.kind === "warning")
+            return Theme.logWarning;
+        if (row.kind !== "note") {
+            if (row.action === "remove")
+                return Theme.logError;
+            if (row.action === "upgrade")
+                return Theme.logCommand;
+            if (row.action === "install" && ["start", "progress", "success", "done"].includes(row.kind))
+                return Theme.logSuccess;
+        }
+        if (row.kind === "success" || row.kind === "done")
+            return Theme.logSuccess;
+        if (row.kind === "progress")
+            return Theme.logValue;
+        if (["command", "build", "start"].includes(row.kind))
+            return Theme.logCommand;
+        return Theme.logText;
+    }
+    function activityIcon(row) {
+        if (row.kind === "error")
+            return "close";
+        if (row.kind === "warning")
+            return "warning";
+        if (row.kind === "build")
+            return "build";
+        if (row.kind === "success")
+            return row.action === "remove" ? "uninstall" : row.action === "upgrade" ? "sync" : "key";
+        if (row.kind === "package" || row.kind === "progress")
+            return row.action === "remove" ? "uninstall" : row.action === "upgrade" ? "sync" : "install";
+        if (row.kind === "command" || row.kind === "build")
+            return "log";
+        return "info";
     }
     function formattedText() {
         const family = Theme.logFont.replace(/["'<>]/g, "");
@@ -163,8 +202,8 @@ Rectangle {
                 color: clearButton.hovered && clearButton.enabled ? Theme.hover : "transparent"
             }
             contentItem: Text {
-                text: Theme.icon("uninstall")
-                font.family: Theme.iconFont
+                text: Theme.logIcon("uninstall")
+                font.family: Theme.logFont
                 font.pixelSize: 16
                 color: clearButton.hovered ? Theme.text : Theme.muted
                 horizontalAlignment: Text.AlignHCenter
@@ -238,7 +277,7 @@ Rectangle {
             objectName: "activityRow"
             required property var model
             readonly property var modelData: model
-            readonly property color tone: modelData.kind === "error" ? Theme.logError : modelData.kind === "warning" ? Theme.logWarning : modelData.kind === "success" || modelData.kind === "done" ? Theme.logSuccess : modelData.kind === "progress" ? Theme.logValue : modelData.kind === "command" || modelData.kind === "build" || modelData.kind === "start" ? Theme.logCommand : Theme.logText
+            readonly property color tone: root.activityTone(modelData)
             width: feed.width
             height: eventLayout.implicitHeight + 6
             RowLayout {
@@ -251,8 +290,8 @@ Rectangle {
                     Layout.alignment: Qt.AlignTop
                     Layout.preferredWidth: 18
                     visible: !["note", "start", "done"].includes(eventRow.modelData.kind)
-                    text: Theme.icon(eventRow.modelData.kind === "error" ? "close" : eventRow.modelData.kind === "success" ? "key" : eventRow.modelData.kind === "package" || eventRow.modelData.kind === "progress" ? "install" : eventRow.modelData.kind === "command" || eventRow.modelData.kind === "build" ? "log" : "info")
-                    font.family: Theme.iconFont
+                    text: Theme.logIcon(root.activityIcon(eventRow.modelData))
+                    font.family: Theme.logFont
                     font.pixelSize: 16
                     color: eventRow.tone
                 }
@@ -271,7 +310,7 @@ Rectangle {
                             selectByMouse: true
                             wrapMode: TextEdit.Wrap
                             font.family: Theme.logFont
-                            font.pixelSize: eventRow.modelData.kind === "done" ? 24 : eventRow.modelData.kind === "start" ? 18 : Theme.logSize
+                            font.pixelSize: eventRow.modelData.kind === "done" ? Theme.logCompletionSize : eventRow.modelData.kind === "start" ? 18 : Theme.logSize
                             font.weight: ["start", "done"].includes(eventRow.modelData.kind) ? Font.Bold : Font.Normal
                             color: eventRow.tone
                             selectionColor: Theme.actionPrimary
@@ -281,7 +320,7 @@ Rectangle {
                             objectName: "activityProgressLabel"
                             visible: !!eventRow.modelData.progressLabel
                             text: eventRow.modelData.progressLabel
-                            color: Theme.logValue
+                            color: eventRow.tone
                             font.family: Theme.logFont
                             font.pixelSize: Theme.metaSize
                         }
@@ -301,7 +340,7 @@ Rectangle {
                         objectName: "activityProgressBar"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 5
-                        visible: eventRow.modelData.kind === "progress"
+                        visible: eventRow.modelData.kind === "progress" || eventRow.modelData.kind === "build"
                         radius: 2.5
                         color: Theme.secondaryAction
                         clip: true
@@ -310,7 +349,7 @@ Rectangle {
                             height: parent.height
                             radius: parent.radius
                             width: eventRow.modelData.progress >= 0 ? parent.width * eventRow.modelData.progress : parent.width * 0.25
-                            color: Theme.logValue
+                            color: eventRow.tone
                             Behavior on width {
                                 NumberAnimation {
                                     duration: Theme.duration

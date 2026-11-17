@@ -354,6 +354,16 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(output, heading, split)
         self.assertEqual(self.bridge.clean_terminal_output("\x1b]0;title\x07" + heading), heading)
 
+    def test_terminal_character_set_sequences_and_split_reads_are_removed(self):
+        decorated = "\x1b(BWARNING: \x1b)0Skipping PGP verification.\x1b(B\n"
+        expected = "WARNING: Skipping PGP verification.\n"
+        for split in range(len(decorated) + 1):
+            self.bridge.terminal_tail = ""
+            cleaned = self.bridge.clean_terminal_output(decorated[:split])
+            cleaned += self.bridge.clean_terminal_output(decorated[split:])
+            self.assertEqual(cleaned, expected, split)
+        self.assertEqual(self.bridge.clean_terminal_output("Use (B) flags and $srcdir/tree"), "Use (B) flags and $srcdir/tree")
+
     def test_transaction_environment_requests_terminal_progress_and_disables_color(self):
         with patch.object(backend, "executable", return_value="/usr/bin/sudo"):
             env = self.bridge.prepare_environment()

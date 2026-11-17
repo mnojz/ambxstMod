@@ -15,7 +15,7 @@ assert.ok(rows.every(row => row.group === 'Downloading'));
 
 rows = parser.parse('==> Starting build()...\n[1/3] Building CXX object example.o\n[2/3] Building CXX object error.o\nwarning: deprecated option\ngcc -c main.c\nmain.c:3: error: missing symbol <x> & y\n-> No AUR package found for openssl-3 (required by: python312)\n');
 assert.equal(rows.filter(row => row.kind === 'build').length, 1);
-assert.equal(rows.find(row => row.kind === 'build').count, 3);
+assert.equal(rows.find(row => row.kind === 'build').count, 4);
 assert.equal(rows.filter(row => row.kind === 'warning').length, 1);
 assert.equal(rows.filter(row => row.kind === 'error').length, 2);
 assert.ok(rows.find(row => row.kind === 'error').title.includes('<x> & y'));
@@ -89,7 +89,7 @@ assert.equal(rows[0].title, 'Installing firefox');
 assert.ok(!rows.some(row=>row.kind==='done'));
 rows = parser.parse('Total (2/5) 40%\n', {...operation,state:'done'});
 assert.equal(rows.at(-1).kind,'done');
-assert.equal(rows.at(-1).title,'Done');
+assert.equal(rows.at(-1).title,'Installed');
 assert.equal(rows.find(row=>row.kind==='progress').progress,1);
 assert.equal(rows.find(row=>row.kind==='progress').progressLabel,'5/5');
 for (const state of ['failed','cancelled']) {
@@ -110,4 +110,66 @@ rows = parser.parse('', {operation:'install',name:'firefox',state:'done',hideSta
 assert.equal(rows.length,1);
 assert.equal(rows[0].kind,'done');
 assert.equal(rows[0].detail,'firefox installed successfully.');
+rows = parser.parse('checking dependencies...\n:: Processing package changes...\n(1/2) removing foo [###] 100%\r(2/2) removing bar [###] 100%\n:: Running post-transaction hooks...\n', {operation:'remove',name:'foo',state:'done'});
+const removal = rows.find(row=>row.kind==='progress');
+assert.equal(removal.group,'Removing');
+assert.equal(removal.title,'Packages');
+assert.equal(removal.detail,'Removing packages');
+assert.equal(removal.action,'remove');
+assert.equal(removal.progressLabel,'2/2');
+assert.equal(rows.at(-1).title,'Removed');
+assert.ok(rows.every(row=>row.action==='remove'));
+assert.ok(!rows.some(row=>/installing|downloading|dependencies/i.test(row.group+' '+row.detail)));
+rows = parser.parse('(1/1) removing conflict [###] 100%\n', {operation:'install',name:'foo',state:'running'});
+assert.equal(rows.find(row=>row.kind==='progress').action,'remove');
+rows = parser.parse('(1/1) upgrading foo [###] 100%\n', {operation:'upgrade',state:'running'});
+assert.equal(rows.find(row=>row.kind==='progress').action,'upgrade');
+assert.equal(rows.find(row=>row.kind==='progress').group,'Upgrading');
+rows = parser.parse('error: could not remove foo\n', {operation:'remove',name:'foo',state:'failed'});
+assert.equal(rows.at(-1).title,'Removal failed');
+for (const [operation,label,action] of [['install','Installed','install'],['remove','Removed','remove'],['upgrade','Updated','upgrade']]) {
+    rows=parser.parse('', {operation,name:'foo',state:'done'});
+    assert.equal(rows.at(-1).title,label);
+    assert.equal(rows.at(-1).action,action);
+}
+rows=parser.parse(':: Retrieving packages...\nTotal (2/3) 50%\n:: Processing package changes...\n(1/2) upgrading foo [###] 100%\n(2/2) installing new-dependency [###] 100%\n', {operation:'upgrade',state:'done'});
+assert.equal(rows.find(row=>row.detail==='Downloading updates').action,'upgrade');
+assert.equal(rows.find(row=>row.group==='Upgrading'&&row.kind==='progress').action,'upgrade');
+assert.equal(rows.at(-1).title,'Updated');
+// Size summaries must never manufacture a download stage or dependency bar.
+for (const state of ['running','done','failed']) {
+    rows=parser.parse('checking dependencies...\nRemove (1) rufin-bin-1.0\nTotal Removed Size: 123.45 MiB\n:: Proceed with removal? [Y/n]\n:: Processing package changes...\n(1/1) removing rufin-bin [###] 100%\n:: Running post-transaction hooks...\n', {operation:'remove',name:'rufin-bin',state});
+    assert.ok(!rows.some(row=>row.group==='Downloading'||row.title==='Dependencies'||/downloading/i.test(row.detail)));
+    assert.equal(rows.filter(row=>row.kind==='progress').length,1);
+    assert.equal(rows.find(row=>row.kind==='progress').detail,'Removing packages');
+}
+rows=parser.parse('Packages (1) foo-1.0\nTotal Download Size: 0.00 MiB\nTotal Installed Size: 25.5 MiB\nNet Upgrade Size: -2.0 MiB\nfoo.tar.gz\n:: Processing package changes...\n(1/1) installing foo [###] 100%\n', {operation:'install',name:'foo',state:'done'});
+assert.ok(!rows.some(row=>row.group==='Downloading'));
+assert.equal(rows.filter(row=>row.kind==='progress').length,1);
+// Actual transfer rows continue to work, even without archive suffixes.
+rows=parser.parse(':: Retrieving packages...\nfoo-1.0 15.5 KiB 19.7 KiB/s 00:33 [###] 25%\n');
+assert.equal(rows.find(row=>row.kind==='progress').group,'Downloading');
+// All build chatter, not just compiler commands, shares one entry.
+const buildOutput = '==> Making package: foo 1.0\n==> Retrieving sources...\n  -> Found foo.tar.gz\n==> Validating source files with sha256sums...\n    foo.tar.gz ... Passed\n==> Extracting sources...\n==> Starting prepare()...\npatching file configure\n==> Starting build()...\nchecking for gcc... yes\ngcc -c main.c\n[1/2] Building object\n[2/2] Linking executable\n==> Entering fakeroot environment...\n==> Starting package()...\ninstalling documentation into pkg/usr/share/doc\n==> Creating package foo...\nCompressing package...\n';
+rows=parser.parse(buildOutput,{operation:'install',name:'foo',state:'running'});
+assert.equal(rows.filter(row=>row.kind==='build').length,1);
+assert.ok(!rows.some(row=>row.kind==='note'||row.kind==='command'));
+assert.equal(rows.find(row=>row.kind==='build').progress,-1);
+assert.equal(rows.find(row=>row.kind==='build').detail,'Packaging build');
+for(const state of ['done','failed','cancelled']) {
+    rows=parser.parse(buildOutput+'error: build failed\nwarning: optional feature disabled\n',{operation:'install',name:'foo',state});
+    assert.equal(rows.filter(row=>row.kind==='build').length,1);
+    assert.equal(rows.filter(row=>row.kind==='error').length,state==='failed'?2:1);
+    assert.equal(rows.filter(row=>row.kind==='warning').length,1);
+    assert.equal(rows.find(row=>row.kind==='build').progress,state==='done'?1:0);
+}
+const characterSetWarning = '\x1b(BWARNING: \x1b(BSkipping verification of source file PGP signatures.\x1b(B\n\x1b(BWARNING: Using existing $srcdir/ tree\x1b(B';
+rows=parser.parse(characterSetWarning);
+assert.equal(rows.length,2);
+assert.ok(rows.every(row=>row.kind==='warning'&&!row.title.includes('\x1b')&&!row.title.includes('(B')));
+assert.equal(rows[0].title,'Skipping verification of source file PGP signatures.');
+assert.equal(rows[1].title,'Using existing $srcdir/ tree');
+assert.equal(parser.cleanOutput('Use (B) flags'), 'Use (B) flags');
+assert.equal(parser.cleanOutput('text\x1b('),'text');
+assert.equal(parser.cleanOutput('\x1b)0text\x1b(B'),'text');
 console.log('Activity parser checks passed');
