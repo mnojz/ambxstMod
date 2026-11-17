@@ -7,6 +7,7 @@ import "ActivityParser.js" as ActivityParser
 
 Rectangle {
     id: root
+    signal clearRequested
     property string logs: ""
     property var transaction: ({})
     property string displayText: ""
@@ -135,6 +136,39 @@ Rectangle {
             onClicked: {
                 root.followTail = !root.followTail;
                 root.scrollToTail();
+            }
+        }
+        Button {
+            id: clearButton
+            objectName: "clearLogButton"
+            implicitWidth: 28
+            implicitHeight: 28
+            padding: 6
+            focusPolicy: Qt.NoFocus
+            hoverEnabled: true
+            enabled: !!root.logs.trim() || root.entries.length > 0
+            opacity: enabled ? 1 : 0.35
+            Accessible.name: "Clear logs"
+            ToolTip.visible: hovered
+            ToolTip.text: "Clear logs"
+            ToolTip.delay: 400
+            onClicked: {
+                root.clearRequested();
+                root.followTail = true;
+                view.contentX = 0;
+                root.refreshText();
+            }
+            background: Rectangle {
+                radius: Theme.keyRadius
+                color: clearButton.hovered && clearButton.enabled ? Theme.hover : "transparent"
+            }
+            contentItem: Text {
+                text: Theme.icon("uninstall")
+                font.family: Theme.iconFont
+                font.pixelSize: 16
+                color: clearButton.hovered ? Theme.text : Theme.muted
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
         }
     }

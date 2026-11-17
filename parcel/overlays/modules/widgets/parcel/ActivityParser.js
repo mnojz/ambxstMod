@@ -39,7 +39,7 @@ function parse(output, transaction) {
     }
     const name = transaction.name || "package";
     const operation = transaction.operation;
-    if (operation) {
+    if (operation && !transaction.hideStart) {
         group = "";
         const title = operation === "remove" ? "Removing " + name : operation === "upgrade" ? "Synchronizing all packages" : operation === "bootstrap" ? "Installing " + (transaction.helper || "AUR helper") : "Installing " + name;
         add("start", title, "");

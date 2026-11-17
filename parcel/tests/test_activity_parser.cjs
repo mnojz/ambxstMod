@@ -105,4 +105,9 @@ rows = parser.parse('1 audacity4-bin (Installed) (Build Files Exist)\n2 example-
 assert.equal(rows.length, 2);
 assert.equal(rows[0].kind, 'warning');
 assert.equal(rows[1].kind, 'error');
+assert.equal(parser.parse('', {operation:'install',name:'firefox',state:'running',hideStart:true}).length,0);
+rows = parser.parse('', {operation:'install',name:'firefox',state:'done',hideStart:true});
+assert.equal(rows.length,1);
+assert.equal(rows[0].kind,'done');
+assert.equal(rows[0].detail,'firefox installed successfully.');
 console.log('Activity parser checks passed');

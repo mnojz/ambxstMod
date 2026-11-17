@@ -218,6 +218,13 @@ Singleton {
             });
     }
 
+    function clearLogs() {
+        logs = "";
+        activityTransaction = activityTransaction.state === "running" ? Object.assign({}, activityTransaction, {
+            hideStart: true
+        }) : ({});
+    }
+
     function begin(action) {
         if (busy)
             return;

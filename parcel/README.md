@@ -76,6 +76,7 @@ dependencies show a full bar. Each operation starts with its package name and en
 with **Done** only after confirmed success; routine confirmation chatter is hidden.
 Compiler chatter is summarized. Choose **Raw** for the original output; long raw lines
 scroll horizontally with a trackpad or **Shift + mouse wheel**.
+The trash icon clears both log views without stopping an active operation.
 Automatic following pauses when you scroll back. Logs prefer JetBrains Mono Nerd Font,
 then another installed Nerd Font.
 

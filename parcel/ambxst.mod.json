@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "mnojz.parcel",
     "name": "Parcel",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Arch and AUR package manager.",
     "compatibility": {
         "api": 1,

@@ -350,7 +350,7 @@ PanelWindow {
                 easing.type: Easing.OutCubic
             }
         }
-        readonly property real compactHeight: 165 + listHeight + (!service.scanning && service.helpers.length === 0 ? 36 : 0) + (service.challenge?.kind === "password" ? 104 : 0) + (service.prompt && !service.challenge ? 36 : 0) + (root.stopConfirmation && service.busy ? 36 : 0)
+        readonly property real compactHeight: 165 + listHeight + (!service.scanning && service.helpers.length === 0 ? 36 : 0) + (service.challenge?.kind === "password" ? 76 : 0) + (service.prompt && !service.challenge ? 36 : 0) + (root.stopConfirmation && service.busy ? 36 : 0)
         height: Math.min(parent.height - 32, compactHeight + logDrawer.revealHeight + (logDrawer.revealHeight > 0 ? 4 : 0) + detailDrawer.revealHeight + (detailDrawer.revealHeight > 0 ? 4 : 0))
         radius: Theme.radius
         color: Theme.background
@@ -756,37 +756,28 @@ PanelWindow {
                 objectName: "authenticationPanel"
                 visible: service.challenge?.kind === "password"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 100
+                Layout.preferredHeight: 72
                 radius: Theme.rowRadius
                 color: Theme.subtle
                 border.width: 1
                 border.color: Theme.border
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.margins: 8
                     spacing: 8
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 12
+                        spacing: 6
                         Icon {
                             name: "key"
-                            width: 20
-                            height: 20
+                            width: 16
+                            height: 16
                         }
-                        ColumnLayout {
+                        Label {
                             Layout.fillWidth: true
-                            spacing: 2
-                            Label {
-                                Layout.fillWidth: true
-                                text: "Authentication required"
-                                font.pixelSize: Theme.nameSize
-                                font.weight: Font.Medium
-                            }
-                            Label {
-                                Layout.fillWidth: true
-                                text: "Package operation paused. Enter your password to continue."
-                                color: Theme.muted
-                            }
+                            text: "Authentication required"
+                            font.pixelSize: Theme.metaSize
+                            font.weight: Font.Medium
                         }
                     }
                     RowLayout {
@@ -797,15 +788,39 @@ PanelWindow {
                             objectName: "passwordField"
                             Layout.fillWidth: true
                             echoMode: TextInput.Password
-                            placeholderText: "Enter your password"
+                            placeholderText: "Password"
                             Accessible.name: service.challenge?.prompt || "Password"
                             onAccepted: root.authenticate()
                         }
-                        SmallButton {
-                            text: "Authenticate"
+                        Button {
+                            id: authenticateButton
+                            objectName: "authenticateButton"
+                            implicitWidth: 92
+                            implicitHeight: 32
+                            leftPadding: 12
+                            rightPadding: 12
+                            hoverEnabled: true
+                            text: "Continue"
+                            Accessible.name: "Authenticate and continue"
                             onClicked: root.authenticate()
+                            background: Rectangle {
+                                radius: Theme.chipRadius
+                                color: authenticateButton.down ? Theme.alpha(Theme.actionPrimary, 0.75) : authenticateButton.hovered ? Qt.tint(Theme.actionPrimary, Theme.hover) : Theme.actionPrimary
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Theme.duration
+                                    }
+                                }
+                            }
+                            contentItem: Label {
+                                text: authenticateButton.text
+                                color: Theme.onActionPrimary
+                                font.weight: Font.Medium
+                                horizontalAlignment: Text.AlignHCenter
+                            }
                         }
                         SmallButton {
+                            objectName: "cancelAuthenticationButton"
                             iconName: "close"
                             tip: "Cancel authentication"
                             onClicked: {
@@ -816,6 +831,7 @@ PanelWindow {
                     }
                 }
             }
+
             RowLayout {
                 visible: !!service.prompt && !service.challenge
                 Layout.fillWidth: true
@@ -1005,6 +1021,7 @@ PanelWindow {
                     anchors.fill: parent
                     logs: service.logs
                     transaction: service.activityTransaction
+                    onClearRequested: service.clearLogs()
                 }
             }
             Item {
