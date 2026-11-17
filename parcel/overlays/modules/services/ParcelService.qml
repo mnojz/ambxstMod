@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import QtQuick
+import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 
@@ -33,12 +34,16 @@ Singleton {
     readonly property bool busy: job !== 0
     property string phase: ""
     property real progress: -1
+    property string progressMode: "loading"
+    property int progressStep: 1
+    property string phaseDetail: ""
     property int completedPackages: 0
     property int totalPackages: 0
     property string progressUnit: "packages"
     property bool cancellable: false
     property bool stopRequested: false
     property string logs: ""
+    property var activityTransaction: ({})
     property string outcome: ""
     property bool failed: false
     property var challenge: null
@@ -103,15 +108,52 @@ Singleton {
         authenticationAttention.restart();
     }
     onHasAttentiveViewChanged: {
-        if (hasAttentiveView)
+        if (hasAttentiveView) {
             clearAuthenticationNotification();
-        else
+            if (databaseRefreshPending)
+                automaticRefresh.restart();
+        } else
             authenticationAttention.restart();
     }
     Timer {
         id: authenticationAttention
         interval: 350
         onTriggered: root.notifyAuthentication()
+    }
+
+    property bool databaseRefreshPending: false
+    function queueDatabaseRefresh() {
+        databaseRefreshPending = true;
+        if (!busy && hasAttentiveView)
+            automaticRefresh.restart();
+    }
+    // Pacman's transaction lock also covers changes made by other frontends.
+    // Watch its directory without polling or adding an external watcher command.
+    FolderListModel {
+        id: packageDatabaseLock
+        folder: "file:///var/lib/pacman"
+        nameFilters: ["db.lck"]
+        showFiles: true
+        showDirs: false
+        showDotAndDotDot: false
+        onCountChanged: root.queueDatabaseRefresh()
+        onStatusChanged: {
+            if (status === FolderListModel.Ready && count === 0 && root.databaseRefreshPending)
+                root.queueDatabaseRefresh();
+        }
+    }
+    Timer {
+        id: automaticRefresh
+        interval: 1000
+        onTriggered: {
+            if (!root.databaseRefreshPending || root.busy || !root.hasAttentiveView)
+                return;
+            if (packageDatabaseLock.status !== FolderListModel.Ready || packageDatabaseLock.count > 0)
+                return;
+            root.refresh();
+            if (root.query.trim())
+                searchDebounce.restart();
+        }
     }
 
     function send(command, data) {
@@ -130,6 +172,7 @@ Singleton {
     }
 
     function refresh() {
+        databaseRefreshPending = false;
         scanning = true;
         scanId = send("scan", {
             helper: preferredHelper
@@ -178,17 +221,26 @@ Singleton {
     function begin(action) {
         if (busy)
             return;
+        activityTransaction = {
+            operation: action.operation,
+            name: action.name || "",
+            helper: action.helper || preferredHelper,
+            state: "running"
+        };
         outcome = "";
         logs = "";
         failed = false;
         challenge = null;
         prompt = null;
         progress = -1;
+        progressMode = "loading";
+        progressStep = 1;
+        phaseDetail = "";
         completedPackages = 0;
         totalPackages = 0;
         progressUnit = "packages";
         stopRequested = false;
-        phase = "Starting…";
+        phase = "Retrieving info";
         job = send("transaction", Object.assign({}, action, {
             confirmed: true,
             helper: action.helper ?? preferredHelper
@@ -285,6 +337,10 @@ Singleton {
             if (event.id === job) {
                 failed = true;
                 outcome = event.message;
+                activityTransaction = Object.assign({}, activityTransaction, {
+                    state: "failed",
+                    message: event.message
+                });
                 job = 0;
             } else if (event.id === detailsId) {
                 detailsError = event.message;
@@ -305,7 +361,10 @@ Singleton {
             totalPackages = Math.max(0, event.total ?? 0);
             completedPackages = Math.max(0, Math.min(totalPackages, event.completed ?? 0));
             progressUnit = event.unit ?? "packages";
-            progress = totalPackages > 0 ? completedPackages / totalPackages : -1;
+            progressMode = event.mode ?? (totalPackages > 1 ? "packages" : "loading");
+            progressStep = event.step ?? 1;
+            phaseDetail = event.detail ?? "";
+            progress = progressMode === "percentage" && event.progress !== null && event.progress !== undefined ? Math.max(0, Math.min(1, event.progress / 100)) : progressMode === "packages" && totalPackages > 0 ? completedPackages / totalPackages : -1;
             cancellable = !!event.cancellable;
             return;
         case "log":
@@ -336,6 +395,10 @@ Singleton {
             phase = event.message;
             return;
         case "finished":
+            activityTransaction = Object.assign({}, activityTransaction, {
+                state: event.cancelled ? "cancelled" : event.ok ? "done" : "failed",
+                message: event.message
+            });
             stopRequested = false;
             failed = !event.ok && !event.cancelled;
             outcome = event.message;
@@ -402,6 +465,10 @@ Singleton {
             if (root.busy) {
                 root.failed = true;
                 root.outcome = "The package service stopped. Check package state before retrying.";
+                root.activityTransaction = Object.assign({}, root.activityTransaction, {
+                    state: "failed",
+                    message: root.outcome
+                });
                 root.job = 0;
             }
             root.challenge = null;

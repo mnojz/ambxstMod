@@ -40,7 +40,6 @@ PanelWindow {
     property string detailsPackageName: ""
     property var activeAction: null
     readonly property var metadata: service.packageMetadata
-    readonly property bool hasActivity: service.busy || !!service.outcome
     readonly property var updateRows: service.results.filter(pkg => !!service.updates[pkg.name])
     readonly property var aurRows: service.results.filter(pkg => pkg.repo === "aur")
     readonly property var filteredRows: filter === "updates" ? updateRows : filter === "aur" ? aurRows : service.results
@@ -91,8 +90,8 @@ PanelWindow {
             return;
         activeAction = {
             operation: operation,
-            name: pkg?.name ?? "",
-            repo: pkg?.repo ?? "",
+            name: operation === "install" || operation === "remove" ? pkg.name : "",
+            repo: operation === "install" || operation === "remove" ? pkg.repo : "",
             helper: helper ?? service.preferredHelper
         };
         showLogs = false;
@@ -156,7 +155,9 @@ PanelWindow {
             label: service.challenge?.kind === "password" ? "Authentication required" : service.prompt ? "Waiting for your response" : service.stopRequested ? "Stopping at the next safe point…" : phase || "Preparing…",
             progress: waiting ? -1 : progress,
             completed: service.completedPackages,
-            total: waiting ? 0 : service.totalPackages
+            total: waiting ? 0 : service.totalPackages,
+            mode: waiting ? "loading" : service.progressMode,
+            step: waiting ? 0 : service.progressStep
         };
     }
     function source(pkg) {
@@ -255,47 +256,46 @@ PanelWindow {
             }
         }
     }
-    component KeyHint: Button {
-        id: hint
-        property string key
+    component ActionButton: Button {
+        id: action
+        property string iconName
+        property string tip
+        property string variant: "ghost"
+        property bool active: false
+        implicitWidth: 36
+        implicitHeight: 36
+        padding: 8
         focusPolicy: Qt.NoFocus
-        implicitWidth: contentItem.implicitWidth
-        implicitHeight: 24
-        padding: 0
         hoverEnabled: true
         opacity: enabled ? 1 : 0.35
-        Accessible.name: key + " " + text
-        background: Item {}
+        Accessible.name: tip
+        ToolTip.visible: hovered
+        ToolTip.text: tip
+        ToolTip.delay: 400
+        background: Rectangle {
+            radius: Theme.chipRadius
+            color: {
+                if (action.variant === "primary")
+                    return action.down ? Qt.darker(Theme.actionPrimary, 1.12) : action.hovered ? Qt.tint(Theme.actionPrimary, Theme.alpha(Theme.text, 0.12)) : Theme.actionPrimary;
+                if (action.variant === "danger")
+                    return Theme.alpha(Theme.danger, action.down ? 0.26 : action.hovered ? 0.2 : 0.12);
+                if (action.variant === "secondary")
+                    return action.down ? Theme.alpha(Theme.text, 0.18) : action.hovered ? Theme.alpha(Theme.text, 0.12) : Theme.secondaryAction;
+                return action.down || action.visualFocus ? Theme.selected : action.hovered ? Theme.hover : "transparent";
+            }
+            Behavior on color {
+                ColorAnimation {
+                    duration: Theme.duration
+                }
+            }
+        }
         contentItem: Item {
-            implicitWidth: hintContents.implicitWidth
-            implicitHeight: 22
-            Row {
-                id: hintContents
+            Icon {
                 anchors.centerIn: parent
-                spacing: 4
-                Rectangle {
-                    width: keyLabel.implicitWidth + 12
-                    height: 22
-                    radius: Theme.keyRadius
-                    color: hint.hovered ? Theme.selected : Theme.subtle
-                    border.color: Theme.border
-                    border.width: 1
-                    anchors.verticalCenter: parent.verticalCenter
-                    Label {
-                        id: keyLabel
-                        anchors.fill: parent
-                        horizontalAlignment: Text.AlignHCenter
-                        text: hint.key
-                        font.family: Theme.mono
-                        font.pixelSize: Theme.smallSize
-                    }
-                }
-                Label {
-                    text: hint.text
-                    color: Theme.muted
-                    font.pixelSize: Theme.smallSize
-                    anchors.verticalCenter: parent.verticalCenter
-                }
+                width: 18
+                height: 18
+                name: action.iconName
+                color: action.variant === "primary" ? Theme.onActionPrimary : action.variant === "danger" ? Theme.danger : action.active || action.hovered ? Theme.text : Theme.muted
             }
         }
     }
@@ -342,8 +342,15 @@ PanelWindow {
         objectName: "card"
         anchors.centerIn: parent
         width: Math.min(parent.width - 32, 620)
-        readonly property int visibleRows: root.filteredRows.length ? Math.min(6, root.filteredRows.length) : 2
-        readonly property real compactHeight: 153 + visibleRows * 42 - 2 + (!service.scanning && service.helpers.length === 0 ? 36 : 0) + (service.challenge?.kind === "password" ? 104 : 0) + (service.prompt && !service.challenge ? 36 : 0) + (root.stopConfirmation && service.busy ? 36 : 0)
+        readonly property int visibleRows: root.filteredRows.length ? Math.min(root.showLogs || root.showDetails ? 2 : 6, root.filteredRows.length) : 2
+        property real listHeight: visibleRows * 42 - 2
+        Behavior on listHeight {
+            NumberAnimation {
+                duration: Theme.duration
+                easing.type: Easing.OutCubic
+            }
+        }
+        readonly property real compactHeight: 165 + listHeight + (!service.scanning && service.helpers.length === 0 ? 36 : 0) + (service.challenge?.kind === "password" ? 104 : 0) + (service.prompt && !service.challenge ? 36 : 0) + (root.stopConfirmation && service.busy ? 36 : 0)
         height: Math.min(parent.height - 32, compactHeight + logDrawer.revealHeight + (logDrawer.revealHeight > 0 ? 4 : 0) + detailDrawer.revealHeight + (detailDrawer.revealHeight > 0 ? 4 : 0))
         radius: Theme.radius
         color: Theme.background
@@ -548,18 +555,6 @@ PanelWindow {
                 Item {
                     Layout.fillWidth: true
                 }
-                SmallButton {
-                    iconName: "refresh"
-                    tip: "Refresh · Ctrl+R"
-                    enabled: !service.busy && !service.scanning
-                    onClicked: service.refresh()
-                }
-                SmallButton {
-                    iconName: "upgrade"
-                    tip: "Upgrade all · Ctrl+U"
-                    enabled: !service.busy
-                    onClicked: root.requestAction("upgrade")
-                }
             }
             RowLayout {
                 visible: !service.scanning && service.helpers.length === 0
@@ -616,6 +611,10 @@ PanelWindow {
                 ListView {
                     id: resultsList
                     objectName: "resultsList"
+                    onHeightChanged: Qt.callLater(() => {
+                        if (root.selectedIndex >= 0)
+                            positionViewAtIndex(root.selectedIndex, ListView.Contain);
+                    })
                     anchors.fill: parent
                     clip: true
                     spacing: 2
@@ -687,7 +686,7 @@ PanelWindow {
                                 textFormat: Text.RichText
                                 font.pixelSize: Theme.nameSize
                                 font.weight: Font.Medium
-                                ToolTip.visible: rowHover.hovered && truncated
+                                ToolTip.visible: rowHover.hovered && truncated && !badgeHover.hovered
                                 ToolTip.text: row.modelData.name
                             }
                             Label {
@@ -703,18 +702,37 @@ PanelWindow {
                                 font.pixelSize: Theme.smallSize
                             }
                             Rectangle {
-                                visible: root.filter !== "aur"
-                                implicitWidth: sourceLabel.implicitWidth + 16
+                                id: repositoryBadge
+                                objectName: "repoBadge-" + row.index
+                                readonly property bool packageInstalled: !!row.modelData.installed
+                                readonly property color repositoryTint: Theme.repositoryColor(root.source(row.modelData))
+                                implicitWidth: Theme.repositoryBadgeWidth
+                                Layout.minimumWidth: implicitWidth
+                                Layout.maximumWidth: implicitWidth
                                 implicitHeight: 20
                                 radius: Theme.keyRadius
-                                color: Theme.selected
+                                color: packageInstalled ? Theme.alpha(repositoryTint, 0.14) : Theme.subtle
+                                border.width: 0
+                                Accessible.name: root.source(row.modelData) + (packageInstalled ? ", installed" : ", not installed")
+                                ToolTip.visible: badgeHover.hovered
+                                ToolTip.text: (packageInstalled ? "Installed" : "Not installed") + " · " + root.source(row.modelData)
+                                ToolTip.delay: 300
+                                HoverHandler {
+                                    id: badgeHover
+                                }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Theme.duration
+                                    }
+                                }
                                 Label {
                                     id: sourceLabel
                                     anchors.fill: parent
                                     horizontalAlignment: Text.AlignHCenter
-                                    text: root.source(row.modelData)
-                                    font.pixelSize: Theme.smallSize
-                                    color: Theme.muted
+                                    text: Theme.repositoryLabel(root.source(row.modelData))
+                                    font.pixelSize: Theme.metaSize
+                                    font.bold: true
+                                    color: repositoryBadge.packageInstalled ? repositoryBadge.repositoryTint : Theme.alpha(Theme.muted, 0.6)
                                 }
                             }
                         }
@@ -822,7 +840,7 @@ PanelWindow {
             Item {
                 id: footer
                 Layout.fillWidth: true
-                Layout.preferredHeight: 32
+                Layout.preferredHeight: 44
                 Rectangle {
                     width: parent.width
                     height: 1
@@ -862,71 +880,8 @@ PanelWindow {
                 }
                 RowLayout {
                     anchors.fill: parent
-                    anchors.topMargin: 6
+                    anchors.topMargin: 8
                     spacing: 8
-                    opacity: root.hasActivity ? 0 : 1
-                    visible: opacity > 0
-                    enabled: !root.hasActivity
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Theme.duration
-                        }
-                    }
-                    KeyHint {
-                        key: "↑↓"
-                        text: "select"
-                        onClicked: root.select(1)
-                    }
-                    KeyHint {
-                        key: "↵"
-                        text: !root.currentPackage && service.query.trim() ? "search AUR" : service.updates[root.currentPackage?.name] ? "upgrade" : root.currentPackage?.installed ? "reinstall" : "install"
-                        enabled: !!root.currentPackage || !!service.query.trim()
-                        onClicked: root.enter()
-                    }
-                    KeyHint {
-                        key: "^D"
-                        text: "remove"
-                        visible: !!root.currentPackage?.installed
-                        onClicked: root.requestAction("remove")
-                    }
-                    KeyHint {
-                        key: "^U"
-                        visible: Object.keys(service.updates).length > 0
-                        text: "upgrade"
-                        onClicked: root.requestAction("upgrade")
-                    }
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                    KeyHint {
-                        key: "^I"
-                        text: "info"
-                        enabled: !!root.currentPackage
-                        onClicked: root.details(root.currentPackage)
-                    }
-                    KeyHint {
-                        key: "^L"
-                        text: "log"
-                        onClicked: root.toggleLogs()
-                    }
-                    KeyHint {
-                        key: "esc"
-                        text: "close"
-                        onClicked: root.handleEscape()
-                    }
-                }
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.topMargin: 6
-                    spacing: 8
-                    opacity: root.hasActivity ? 1 : 0
-                    visible: opacity > 0
-                    enabled: root.hasActivity
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Theme.duration
-                        }
-                    }
                     Icon {
                         name: "spinner"
                         visible: service.busy
@@ -935,42 +890,78 @@ PanelWindow {
                             to: 360
                             duration: 900
                             loops: Animation.Infinite
-                            running: service.busy && root.open
+                            running: service.busy && root.open && !service.challenge && !service.prompt && !service.stopRequested
                         }
                     }
                     Label {
                         Layout.fillWidth: true
-                        text: service.busy ? root.activity.label : service.outcome
-                        color: service.failed ? Theme.error : Theme.text
+                        text: service.busy ? (root.activity.step ? root.activity.step + "/4 · " : "") + root.activity.label : service.outcome || (root.filteredRows.length + (root.filteredRows.length === 1 ? " package" : " packages"))
+                        color: service.failed ? Theme.error : Theme.muted
+                        ToolTip.visible: phaseHover.hovered && (service.busy ? !!service.phaseDetail : !!service.outcome)
+                        ToolTip.text: service.busy ? service.phaseDetail : "Dismiss status"
+                        HoverHandler {
+                            id: phaseHover
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: !service.busy && !!service.outcome
+                            onClicked: service.outcome = ""
+                        }
                     }
                     Label {
                         objectName: "progressCount"
-                        visible: service.busy && root.activity.total > 0
-                        text: root.activity.completed + "/" + root.activity.total + " " + service.progressUnit
+                        visible: service.busy && root.activity.progress >= 0
+                        text: root.activity.mode === "percentage" ? Math.round(root.activity.progress * 100) + "%" : root.activity.completed + "/" + root.activity.total
                         color: Theme.muted
                     }
-                    SmallButton {
+                    ActionButton {
+                        objectName: "detailsButton"
+                        iconName: "info"
+                        tip: "Package details · Ctrl+I"
+                        active: root.showDetails
+                        enabled: !!root.currentPackage
+                        onClicked: root.details(root.currentPackage)
+                    }
+                    ActionButton {
+                        objectName: "logsButton"
                         iconName: "log"
-                        text: "Log"
-                        tip: "Toggle log · Ctrl+L"
+                        tip: "Activity log · Ctrl+L"
+                        active: root.showLogs
                         onClicked: root.toggleLogs()
                     }
-                    SmallButton {
+                    ActionButton {
+                        objectName: "syncAllButton"
+                        visible: !service.busy
+                        iconName: "sync"
+                        variant: "secondary"
+                        tip: "Sync all packages · Ctrl+U"
+                        onClicked: root.requestAction("upgrade")
+                    }
+                    ActionButton {
+                        objectName: "uninstallButton"
+                        visible: !service.busy && !!root.currentPackage?.installed
+                        iconName: "uninstall"
+                        variant: "danger"
+                        tip: "Uninstall " + (root.currentPackage?.name ?? "package") + " · Ctrl+D"
+                        onClicked: root.requestAction("remove")
+                    }
+                    ActionButton {
+                        objectName: "installButton"
+                        visible: !service.busy
+                        iconName: "install"
+                        variant: "primary"
+                        enabled: !!root.currentPackage
+                        tip: (root.currentPackage?.installed ? "Reinstall " : "Install ") + (root.currentPackage?.name ?? "package") + " · Enter"
+                        onClicked: root.requestAction("install")
+                    }
+                    ActionButton {
+                        objectName: "stopButton"
                         visible: service.busy
                         iconName: "stop"
-                        text: service.stopRequested ? "Stopping…" : "Stop"
+                        variant: "secondary"
                         enabled: !service.stopRequested
-                        objectName: "stopButton"
+                        tip: service.stopRequested ? "Waiting for a safe point to stop" : "Stop current operation"
                         onClicked: root.stopConfirmation = true
-                    }
-                    SmallButton {
-                        visible: !service.busy
-                        iconName: "close"
-                        tip: "Dismiss result"
-                        onClicked: {
-                            service.outcome = "";
-                            root.showLogs = false;
-                        }
                     }
                 }
             }
@@ -997,7 +988,7 @@ PanelWindow {
                 objectName: "logDrawer"
                 Layout.fillWidth: true
                 Layout.minimumHeight: 0
-                property real revealHeight: root.showLogs ? (service.logs.trim() ? Math.min(160, Math.max(64, root.height - card.compactHeight - 48)) : 32) : 0
+                property real revealHeight: root.showLogs ? Math.min(340, Math.max(96, root.height - card.compactHeight - 48)) : 0
                 Layout.maximumHeight: revealHeight
                 Layout.preferredHeight: revealHeight
                 visible: root.showLogs || revealHeight > 0
@@ -1008,72 +999,19 @@ PanelWindow {
                         easing.type: Easing.OutCubic
                     }
                 }
-                Rectangle {
+                ActivityLog {
+                    id: activityLog
+                    objectName: "activityLog"
                     anchors.fill: parent
-                    radius: Theme.rowRadius
-                    color: Theme.subtle
-                }
-                Flickable {
-                    id: logView
-                    objectName: "logView"
-                    anchors.fill: parent
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    flickableDirection: Flickable.AutoFlickDirection
-                    contentWidth: Math.max(width, logFont.advanceWidth("M") * logColumns + 16)
-                    contentHeight: Math.max(height, logText.contentHeight + 16)
-                    readonly property int logColumns: service.logs.split("\n").reduce((longest, line) => Math.max(longest, line.replace(/\t/g, "        ").length), 160)
-                    property bool followTail: true
-                    function scrollToTail() {
-                        if (followTail && root.showLogs)
-                            contentY = Math.max(0, contentHeight - height);
-                    }
-                    onContentHeightChanged: Qt.callLater(scrollToTail)
-                    onHeightChanged: Qt.callLater(scrollToTail)
-                    onMovementEnded: followTail = contentY >= contentHeight - height - 24
-                    FontMetrics {
-                        id: logFont
-                        font: logText.font
-                    }
-                    TextEdit {
-                        id: logText
-                        objectName: "logText"
-                        x: 8
-                        y: 8
-                        width: logView.contentWidth - 16
-                        height: Math.max(logView.height - 16, contentHeight)
-                        text: service.logs || "Activity appears here when an operation starts."
-                        readOnly: true
-                        selectByMouse: true
-                        wrapMode: TextEdit.NoWrap
-                        color: Theme.text
-                        opacity: 0.7
-                        font.family: Theme.mono
-                        font.pixelSize: Theme.smallSize
-                        textFormat: TextEdit.PlainText
-                    }
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AlwaysOff
-                    }
-                    ScrollBar.horizontal: ScrollBar {
-                        policy: ScrollBar.AlwaysOff
-                    }
-                    WheelHandler {
-                        target: null
-                        acceptedModifiers: Qt.ShiftModifier
-                        onWheel: event => {
-                            const delta = event.pixelDelta.x || event.pixelDelta.y || event.angleDelta.x / 2 || event.angleDelta.y / 2;
-                            logView.contentX = Math.max(0, Math.min(logView.contentWidth - logView.width, logView.contentX - delta));
-                            event.accepted = true;
-                        }
-                    }
+                    logs: service.logs
+                    transaction: service.activityTransaction
                 }
             }
             Item {
                 id: detailDrawer
                 Layout.fillWidth: true
                 Layout.minimumHeight: 0
-                property real revealHeight: root.showDetails ? 128 : 0
+                property real revealHeight: root.showDetails ? Math.min(340, Math.max(120, root.height - card.compactHeight - 48)) : 0
                 Layout.maximumHeight: revealHeight
                 Layout.preferredHeight: revealHeight
                 visible: root.showDetails || revealHeight > 0
@@ -1084,38 +1022,12 @@ PanelWindow {
                         easing.type: Easing.OutCubic
                     }
                 }
-                Rectangle {
+                PackageInfo {
+                    objectName: "packageInfo"
                     anchors.fill: parent
-                    color: Theme.subtle
-                    radius: Theme.rowRadius
-                }
-                Flickable {
-                    id: detailView
-                    anchors.fill: parent
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    contentWidth: width
-                    contentHeight: Math.max(height, detailText.contentHeight + 16)
-                    TextEdit {
-                        id: detailText
-                        objectName: "detailText"
-                        x: 8
-                        y: 8
-                        width: Math.max(0, detailView.width - 16)
-                        height: contentHeight
-                        text: Object.keys(service.details).length ? Object.keys(service.details).map(key => key + ": " + service.details[key]).join("\n") : service.detailsError || "Loading package details…"
-                        readOnly: true
-                        selectByMouse: true
-                        wrapMode: TextEdit.Wrap
-                        textFormat: TextEdit.PlainText
-                        color: Theme.muted
-                        font.family: Theme.font
-                        font.pixelSize: Theme.metaSize
-                        onTextChanged: detailView.contentY = 0
-                    }
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AlwaysOff
-                    }
+                    pkg: root.currentPackage
+                    details: service.details.Name === root.currentPackage?.name ? service.details : service.packageMetadata[root.currentPackage?.name] ?? ({})
+                    error: service.selectedPackage?.name === root.currentPackage?.name ? service.detailsError : ""
                 }
             }
         }
@@ -1158,11 +1070,6 @@ PanelWindow {
         sequence: "Ctrl+L"
         enabled: root.open
         onActivated: root.toggleLogs()
-    }
-    Shortcut {
-        sequence: "Ctrl+R"
-        enabled: root.open && !service.busy
-        onActivated: service.refresh()
     }
     Shortcut {
         sequence: "Ctrl+U"

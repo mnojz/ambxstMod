@@ -26,7 +26,9 @@ import time
 
 HELPERS = ("paru", "yay")
 NAME = re.compile(r"^[a-zA-Z0-9@_+][a-zA-Z0-9@._+:-]{0,199}$")
-ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+PACKAGE_PLAN = re.compile(r"^\s*(?:Packages|Remove)\s*\((\d+)\)", re.I)
+INCOMPLETE_ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*|\][^\x07\x1b]*(?:\x1b)?)?$")
 PACKAGE_COUNT = re.compile(r"\(\s*(\d+)\s*/\s*(\d+)\s*\)")
 PERCENT = re.compile(r"(?<!\d)(\d{1,3})(?:\.\d+)?%")
 PROMPT = re.compile(r"(?:\[[YyNn]/[YyNn]\]|[?:>]\s*$)")
@@ -114,6 +116,7 @@ class Bridge:
         self.helper = ""
         self.job = None
         self.worker = None
+        self.operation = ""
         self.master = None
         self.pending = {}
         self.prompt_id = None
@@ -305,7 +308,7 @@ class Bridge:
                    SUDO_ASKPASS=str(self.runtime / "askpass"), PARCEL_SOCKET=str(self.socket_path),
                    PARCEL_TOKEN=self.token, PAGER="cat", GIT_PAGER="cat", PARU_PAGER="cat",
                    EDITOR=str(self.runtime / "review"), VISUAL=str(self.runtime / "review"),
-                   COLUMNS="160", LINES="30")
+                   COLUMNS="160", LINES="30", TERM="xterm-256color")
         return env
 
     def start_transaction(self, request):
@@ -340,6 +343,7 @@ class Bridge:
         try:
             env = self.prepare_environment()
             operation = request["operation"]
+            self.operation = operation
             helper = self.choose_helper(request.get("helper", "auto"))
             if operation == "bootstrap":
                 self.bootstrap(request["helper"], env)
@@ -374,7 +378,7 @@ class Bridge:
         if shutil.which(helper):
             self.emit("log", job=self.job, text=f"{helper} is already installed.")
             return
-        self.emit("phase", job=self.job, label="Installing build dependencies", progress=None, cancellable=False)
+        self.emit("phase", job=self.job, label="Installing", detail="Installing build dependencies", step=3, mode="loading", progress=None, cancellable=False)
         self.run_pty([str(self.runtime / "sudo"), executable("pacman"), "-S", "--needed", "--noconfirm", "base-devel", "git"], env)
         with tempfile.TemporaryDirectory(prefix="parcel-build-") as temp:
             checkout = Path(temp) / helper
@@ -411,10 +415,10 @@ class Bridge:
             self.master = master
             self.cancellable = safe
             self.commit_active = False
-            self.phase_label = "Preparing"
+            self.phase_label = "Retrieving info"
             self.reset_progress()
             self.last_prompt = ""
-        self.emit("phase", job=self.job, label="Preparing", progress=None, cancellable=safe)
+        self.emit("phase", job=self.job, label="Retrieving info", step=1, mode="loading", progress=None, cancellable=safe)
         buffer = ""
         decoder = __import__("codecs").getincrementaldecoder("utf-8")("replace")
         selector = selectors.DefaultSelector()
@@ -429,7 +433,7 @@ class Bridge:
                         break
                     if not data:
                         break
-                    text = ANSI.sub("", decoder.decode(data))
+                    text = self.clean_terminal_output(decoder.decode(data))
                     buffer += text
                     self.emit("log", job=self.job, text=text[:16000])
                     self.track_progress(text)
@@ -457,10 +461,24 @@ class Bridge:
 
     def reset_progress(self):
         self.progress_stage = "preparing"
+        self.planned_packages = 0
+        self.single_progress = 0
+        self.terminal_tail = ""
         self.progress_completed = 0
         self.progress_total = 0
         self.progress_buffer = ""
         self.last_phase_event = None
+
+    def clean_terminal_output(self, text):
+        text = self.terminal_tail + text
+        self.terminal_tail = ""
+        partial = INCOMPLETE_ANSI.search(text)
+        if partial:
+            self.terminal_tail = partial.group()[-4096:]
+            text = text[:partial.start()]
+        # Cursor moves delimit independently redrawn rows, rather than joining
+        # a file's percentage to the following aggregate Total counter.
+        return ANSI.sub(lambda match: "\r" if match.group().startswith("\x1b[") and match.group()[-1] in "ABCDEFGHJKSTf" else "", text)
 
     def track_progress(self, text):
         # PTY reads can split a package counter or stage heading mid-line.
@@ -507,6 +525,8 @@ class Bridge:
         elif any(word in lower for word in ("installing ", "upgrading ", "removing ", "processing package changes")):
             stage, label, safe = "applying", "Applying package changes", False
             self.commit_active = True
+        elif "checking aur" in lower or "checking for updates" in lower:
+            stage, label, safe = "resolving", "Checking for updates", not self.commit_active
         elif "checking " in lower:
             stage, label, safe = "checking", "Checking packages", False
             self.commit_active = True
@@ -517,35 +537,68 @@ class Bridge:
         elif "starting full system upgrade" in lower:
             stage, label, safe = "resolving", "Preparing system upgrade", not self.commit_active
 
+        plan = PACKAGE_PLAN.search(text)
+        if plan:
+            self.planned_packages = int(plan[1])
         changed_stage = stage != self.progress_stage
         if changed_stage:
             self.progress_stage = stage
             self.progress_completed = self.progress_total = 0
+            self.single_progress = 0
+        if "retrieving sources" in lower or "cloning into" in lower:
+            self.planned_packages = 0
         if label:
             self.phase_label = label
         self.cancellable = safe
 
         counter = PACKAGE_COUNT.search(text)
-        # Download percentages are bytes for an individual file, never the job.
-        # Only pacman's aggregate Total counter measures downloaded packages.
+        percentages = PERCENT.findall(text)
+        percent = min(100, int(percentages[-1])) if percentages else None
         aggregate_download = stage == "downloading" and re.search(r"\btotal\s*\(", lower)
-        if counter and (aggregate_download or stage in ("applying", "finalizing")):
+        measured = stage in ("downloading", "applying")
+        if counter and (aggregate_download or stage == "applying"):
             current, total = map(int, counter.groups())
             if 0 <= current <= total and total > 0:
-                percentages = PERCENT.findall(text)
-                complete = aggregate_download or (percentages and int(percentages[-1]) >= 100)
+                complete = aggregate_download or (percent is not None and percent >= 100)
                 completed = current if complete else max(0, current - 1)
                 if self.progress_total != total:
-                    self.progress_total, self.progress_completed = total, 0
+                    self.progress_total, self.progress_completed, self.single_progress = total, 0, 0
                 self.progress_completed = max(self.progress_completed, completed)
-        progress = 100 * self.progress_completed / self.progress_total if self.progress_total else None
-        unit = "tasks" if stage == "finalizing" else "packages"
-        event_key = (stage, self.phase_label, self.progress_completed, self.progress_total, safe)
-        if (label or counter) and event_key != self.last_phase_event:
+                if total == 1:
+                    self.single_progress = max(self.single_progress, 100 if completed else percent or 0)
+        elif stage == "downloading" and self.planned_packages == 1:
+            self.progress_total = 1
+            if percent is not None:
+                self.single_progress = max(self.single_progress, percent)
+                self.progress_completed = int(self.single_progress >= 100)
+        elif stage == "downloading" and self.progress_total == 1 and percent is not None:
+            self.single_progress = max(self.single_progress, percent)
+            self.progress_completed = int(self.single_progress >= 100)
+
+        # Four user-facing steps; build/check details remain available separately.
+        if stage in ("preparing", "resolving", "syncing"):
+            step, title = 1, "Retrieving info"
+        elif stage == "downloading":
+            step, title = 2, "Downloading dependencies"
+        elif stage in ("finalizing", "cleanup"):
+            step, title = 4, "Finalizing"
+        else:
+            step, title = 3, "Removing" if self.operation == "remove" else "Installing"
+        detail = self.phase_label
+        if measured and self.progress_total == 1:
+            mode, progress = "percentage", self.single_progress
+        elif measured and self.progress_total > 1:
+            mode, progress = "packages", 100 * self.progress_completed / self.progress_total
+        else:
+            mode, progress = "loading", None
+        total = self.progress_total if measured else 0
+        completed = self.progress_completed if measured else 0
+        event_key = (stage, title, detail, mode, progress, completed, total, safe)
+        if (label or counter or plan or measured and percent is not None) and event_key != self.last_phase_event:
             self.last_phase_event = event_key
-            self.emit("phase", job=self.job, stage=stage, label=self.phase_label,
-                      progress=progress, completed=self.progress_completed, total=self.progress_total,
-                      unit=unit, cancellable=safe)
+            self.emit("phase", job=self.job, stage=stage, label=title, detail=detail, step=step,
+                      mode=mode, progress=progress, completed=completed, total=total,
+                      unit="packages", cancellable=safe)
         if self.cancel_requested and safe and not self.cancelled:
             self.cancel({"job": self.job, "confirmed": True})
 
@@ -562,7 +615,7 @@ class Bridge:
             self.cancellable = False
         self.emit("prompt_clear", job=self.job)
         self.last_phase_event = None
-        self.emit("phase", job=self.job, label="Continuing", progress=None, completed=0, total=0, cancellable=False)
+        self.emit("phase", job=self.job, label="Retrieving info", detail="Continuing package operation", step=1, mode="loading", progress=None, completed=0, total=0, cancellable=False)
 
     def cancel(self, request):
         with self.lock:

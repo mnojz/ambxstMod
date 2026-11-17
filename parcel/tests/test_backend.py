@@ -218,7 +218,7 @@ class BridgeTests(unittest.TestCase):
         self.bridge.job = 7
         self.bridge.track_progress("Downloading 67%\n")
         self.bridge.track_progress("==> Starting build()\n")
-        self.assertEqual(self.recorded[-1]["label"], "Building")
+        self.assertEqual(self.recorded[-1]["label"], "Installing")
         self.assertIsNone(self.recorded[-1]["progress"])
         self.bridge.track_progress("installing kitty\n")
         self.assertFalse(self.bridge.cancellable)
@@ -258,13 +258,13 @@ class BridgeTests(unittest.TestCase):
         self.bridge.track_progress("(1/4) installing example 50%\r")
         self.assertEqual(self.recorded[-1]["completed"], 0)
         self.bridge.track_progress("==> Starting build()\n")
-        self.assertEqual(self.recorded[-1]["label"], "Building")
+        self.assertEqual(self.recorded[-1]["label"], "Installing")
         self.assertEqual(self.recorded[-1]["total"], 0)
         self.assertIsNone(self.recorded[-1]["progress"])
 
-    def test_hooks_have_task_counts_and_cleanup_is_indeterminate(self):
+    def test_hooks_and_cleanup_are_indeterminate_finalizing(self):
         self.bridge.track_progress(":: Running post-transaction hooks...\n(2/5) Updating cache...\n")
-        self.assertEqual((self.recorded[-1]["completed"], self.recorded[-1]["total"], self.recorded[-1]["unit"]), (1, 5, "tasks"))
+        self.assertEqual((self.recorded[-1]["step"], self.recorded[-1]["mode"], self.recorded[-1]["total"]), (4, "loading", 0))
         self.assertFalse(self.bridge.cancellable)
         self.bridge.track_progress("==> Cleaning up...\n")
         self.assertEqual(self.recorded[-1]["stage"], "cleanup")
@@ -286,6 +286,80 @@ class BridgeTests(unittest.TestCase):
         self.bridge.track_progress(":: Retrieving packages...\n")
         self.assertEqual(self.recorded[-1]["total"], 0)
         self.assertIsNone(self.recorded[-1]["progress"])
+
+    def test_single_download_shows_continuous_percentage_from_package_plan(self):
+        self.bridge.track_progress("Packages (1) example-1.0\n:: Retrieving packages...\n")
+        self.bridge.track_progress("example-1.0 10 MiB 37%\r")
+        self.assertEqual((self.recorded[-1]["step"], self.recorded[-1]["mode"], self.recorded[-1]["total"]), (2, "percentage", 1))
+        self.assertEqual(self.recorded[-1]["progress"], 37)
+        self.bridge.track_progress("example-1.0 10 MiB 82%\r")
+        self.assertEqual(self.recorded[-1]["progress"], 82)
+        self.bridge.track_progress("example-1.0 10 MiB 100%\r")
+        self.assertEqual(self.recorded[-1]["completed"], 1)
+
+    def test_single_total_download_uses_byte_percentage_until_file_completes(self):
+        self.bridge.track_progress(":: Retrieving packages...\nTotal (0/1) 47%\r")
+        self.assertEqual((self.recorded[-1]["mode"], self.recorded[-1]["progress"]), ("percentage", 47))
+        self.bridge.track_progress("Total (1/1) 100%\r")
+        self.assertEqual(self.recorded[-1]["progress"], 100)
+
+    def test_single_install_uses_percentage_but_multiple_installs_use_counts(self):
+        self.bridge.track_progress("(1/1) installing example 43%\r")
+        self.assertEqual((self.recorded[-1]["mode"], self.recorded[-1]["progress"]), ("percentage", 43))
+        self.bridge.reset_progress()
+        self.bridge.track_progress("(234/345) installing example 100%\r")
+        self.assertEqual(self.recorded[-1]["mode"], "packages")
+        self.assertEqual((self.recorded[-1]["completed"], self.recorded[-1]["total"]), (234, 345))
+        self.assertAlmostEqual(self.recorded[-1]["progress"], 234/345*100)
+
+    def test_bulk_download_does_not_mistake_one_file_for_the_whole_batch(self):
+        self.bridge.track_progress("Packages (345) example other\n:: Retrieving packages...\n")
+        self.bridge.track_progress("example-1.0 100%\r")
+        self.assertEqual(self.recorded[-1]["mode"], "loading")
+        self.bridge.track_progress("Total (234/345) 88%\r")
+        self.assertEqual(self.recorded[-1]["mode"], "packages")
+        count = len(self.recorded)
+        self.bridge.track_progress("other-package 1%\rother-package 100%\r")
+        self.assertEqual(len(self.recorded), count)
+
+    def test_four_steps_and_build_details_keep_unmeasured_work_indeterminate(self):
+        self.bridge.track_progress("resolving dependencies...\n")
+        self.assertEqual((self.recorded[-1]["step"], self.recorded[-1]["label"]), (1, "Retrieving info"))
+        self.bridge.track_progress(":: Retrieving packages...\nTotal (1/2) 60%\r")
+        self.assertEqual((self.recorded[-1]["step"], self.recorded[-1]["label"]), (2, "Downloading dependencies"))
+        self.bridge.track_progress("(1/2) installing example 100%\r")
+        self.assertEqual((self.recorded[-1]["step"], self.recorded[-1]["label"]), (3, "Installing"))
+        self.bridge.track_progress("==> Starting build()\n")
+        self.assertEqual((self.recorded[-1]["step"], self.recorded[-1]["detail"], self.recorded[-1]["mode"]), (3, "Building", "loading"))
+        self.bridge.track_progress(":: Running post-transaction hooks...\n(1/20) Updating cache...\n")
+        self.assertEqual((self.recorded[-1]["step"], self.recorded[-1]["label"], self.recorded[-1]["mode"]), (4, "Finalizing", "loading"))
+        self.assertIsNone(self.recorded[-1]["progress"])
+
+    def test_terminal_redraw_and_split_escape_sequences_preserve_total_counter(self):
+        self.bridge.track_progress(":: Retrieving packages...\n")
+        self.bridge.track_progress(self.bridge.clean_terminal_output("example 100%\x1b[1A\x1b[2"))
+        self.bridge.track_progress(self.bridge.clean_terminal_output("KTotal (12/40) 50%\r"))
+        self.assertEqual((self.recorded[-1]["completed"], self.recorded[-1]["total"]), (12, 40))
+        self.assertNotIn("\x1b", self.bridge.progress_buffer)
+
+    def test_sudo_session_metadata_is_removed_without_losing_package_output(self):
+        metadata = "\x1b]3008;start=ed94bd68c8f3414111c5c75;user=manoj;hostname=archlinux;type=session\x1b\\"
+        heading = ":: Synchronizing package databases\n"
+        self.assertEqual(self.bridge.clean_terminal_output(metadata + heading), heading)
+        self.assertEqual(self.bridge.terminal_tail, "")
+        for split in range(1, len(metadata)):
+            self.bridge.terminal_tail = ""
+            output = self.bridge.clean_terminal_output(metadata[:split])
+            output += self.bridge.clean_terminal_output(metadata[split:] + heading)
+            self.assertEqual(output, heading, split)
+        self.assertEqual(self.bridge.clean_terminal_output("\x1b]0;title\x07" + heading), heading)
+
+    def test_transaction_environment_requests_terminal_progress_and_disables_color(self):
+        with patch.object(backend, "executable", return_value="/usr/bin/sudo"):
+            env = self.bridge.prepare_environment()
+        self.assertEqual(env["TERM"], "xterm-256color")
+        self.assertEqual(env["NO_COLOR"], "1")
+        self.assertEqual(env["COLUMNS"], "160")
 
     def test_both_helpers_use_embedded_sudo_and_review_wrappers(self):
         for helper in backend.HELPERS:
@@ -374,7 +448,7 @@ class BridgeTests(unittest.TestCase):
         self.bridge.job = 7
         self.bridge.track_progress("Downloading packages 100%\nchecking package integrity\ninstalling example\n")
         self.assertFalse(self.bridge.cancellable)
-        self.assertEqual(self.recorded[-1]["label"], "Applying package changes")
+        self.assertEqual(self.recorded[-1]["label"], "Installing")
 
     def test_bootstrap_requires_build_review_before_makepkg(self):
         self.bridge.job = 15

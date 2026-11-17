@@ -1,2 +1,4 @@
 singleton Theme 1.0 Theme.qml
 Parcel 1.0 Parcel.qml
+PackageInfo 1.0 PackageInfo.qml
+ActivityLog 1.0 ActivityLog.qml

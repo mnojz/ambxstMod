@@ -31,16 +31,19 @@ Assign that command to your preferred desktop shortcut.
 ## Use
 
 - Type to search repositories and the AUR. An empty search shows explicitly installed packages.
-- Filter with **All**, **Updates**, or **AUR**. Select a package and use the action hints in the footer.
+- Colored repository badges mark installed packages; gray badges mark packages you have not installed.
+- Filter with **All**, **Updates**, or **AUR**, then use the icon actions at the bottom right. Hover an icon for its action and keyboard shortcut.
 - Press **Enter** to install or reinstall, **Ctrl+D** to remove, and **Ctrl+I** for details.
 - Repository labels and installed-package metadata load with the list; details use the cache while refreshing.
-- Use the refresh and upgrade icons, or **Ctrl+R** and **Ctrl+U**.
+- Choose **Sync all** to synchronize repositories and upgrade repository/AUR packages (**Ctrl+U**). The package list refreshes automatically.
 - Actions start immediately. Enter your password in the main activity area when requested. Package tools use `--noconfirm` to accept their default options.
 
 No external terminal opens. The activity area shows progress and an expandable log.
-The footer follows preparation, downloads, package changes, builds, and cleanup.
-It shows completed/total package counts when available; unmeasured stages use a
-moving loading indicator. Per-file download percentages stay in the log. **Stop** asks for confirmation in the main window. During package changes, cancellation waits for a safe point.
+The footer shows four steps: retrieving info, downloading dependencies, installing,
+and finalizing. A single package uses a percentage; multiple packages use completed/total
+counts for the current download or installation batch. Retrieving info, finalizing, and
+unmeasured AUR builds use a loading animation. **Stop** asks for confirmation in the
+main window. During package changes, cancellation waits for a safe point.
 
 Closing the window hides the UI while an active transaction continues. Reopen
 Parcel to answer a pending prompt or check progress. Passwords are not saved or
@@ -63,8 +66,18 @@ Official repository packages remain available without an AUR helper.
 
 The compact window uses 40px package rows and Inter, Noto Sans, or system sans.
 Its log drawer starts collapsed. Open it with **Ctrl+L** or **Log**.
-Log lines keep their original layout in a wide, horizontally scrollable area.
-Use a trackpad or **Shift + mouse wheel** to scroll sideways.
+Opening logs or details reduces the package list to two rows, giving the drawer more room.
+Package details show a readable facts grid, expandable dependencies, and the project website.
+The activity drawer groups package operations into readable steps, combines repeated
+progress updates, and highlights warnings and errors with your shell palette.
+Repository downloads update one progress bar per repository. Dependencies use a
+single completed/total bar for each download or installation batch. Already installed
+dependencies show a full bar. Each operation starts with its package name and ends
+with **Done** only after confirmed success; routine confirmation chatter is hidden.
+Compiler chatter is summarized. Choose **Raw** for the original output; long raw lines
+scroll horizontally with a trackpad or **Shift + mouse wheel**.
+Automatic following pauses when you scroll back. Logs prefer JetBrains Mono Nerd Font,
+then another installed Nerd Font.
 
 ## Keyboard shortcuts
 
@@ -73,8 +86,7 @@ Use a trackpad or **Shift + mouse wheel** to scroll sideways.
 | ↑ / ↓ | Select a package |
 | Enter | Install selected package |
 | Ctrl+D | Remove selected package |
-| Ctrl+U | Upgrade all packages |
-| Ctrl+R | Refresh packages |
+| Ctrl+U | Sync all packages |
 | Ctrl+I | Toggle selected package details |
 | Ctrl+L | Toggle log drawer |
 | Escape | Close the log drawer first, then hide Parcel |

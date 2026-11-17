@@ -19,6 +19,21 @@
         },
         {
             "type": "overlay",
+            "source": "overlays/modules/widgets/parcel/ActivityLog.qml",
+            "target": "modules/widgets/parcel/ActivityLog.qml"
+        },
+        {
+            "type": "overlay",
+            "source": "overlays/modules/widgets/parcel/ActivityParser.js",
+            "target": "modules/widgets/parcel/ActivityParser.js"
+        },
+        {
+            "type": "overlay",
+            "source": "overlays/modules/widgets/parcel/PackageInfo.qml",
+            "target": "modules/widgets/parcel/PackageInfo.qml"
+        },
+        {
+            "type": "overlay",
             "source": "overlays/modules/widgets/parcel/Theme.qml",
             "target": "modules/widgets/parcel/Theme.qml"
         },
