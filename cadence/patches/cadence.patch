@@ -219,7 +219,7 @@ index 7962cdde..056b5243 100644
 +    "systrayExclude": ["blueman"]
  }
 diff --git a/modules/bar/BarContent.qml b/modules/bar/BarContent.qml
-index c8bd6e5e..dc154723 100644
+index c8bd6e5..067c639 100644
 --- a/modules/bar/BarContent.qml
 +++ b/modules/bar/BarContent.qml
 @@ -22,11 +22,22 @@ import "." as Bar
@@ -945,6 +945,33 @@ index c8bd6e5e..dc154723 100644
  
                          LauncherButton {
                              id: launcherButton
+@@ -529,6 +1131,12 @@ Item {
+                             endRadius: root.innerRadius
+                         }
+ 
++                        CadenceConnectivity {
++                            bar: root
++                            layerEnabled: root.shadowsEnabled
++                            radius: root.innerRadius
++                        }
++
+                         ControlsButton {
+                             id: controlsButton
+                             bar: root
+@@ -736,6 +1344,13 @@ Item {
+                             }
+                         }
+ 
++                        CadenceConnectivity {
++                            bar: root
++                            layerEnabled: root.shadowsEnabled
++                            vertical: true
++                            radius: root.innerRadius
++                        }
++
+                         ControlsButton {
+                             id: controlsButtonVert
+                             bar: root
 diff --git a/modules/bar/BatteryIndicator.qml b/modules/bar/BatteryIndicator.qml
 index 94490f92..720a80e7 100644
 --- a/modules/bar/BatteryIndicator.qml
@@ -1214,57 +1241,12 @@ index 94490f92..720a80e7 100644
                      }
                  }
 diff --git a/modules/bar/ControlsButton.qml b/modules/bar/ControlsButton.qml
-index 68577a92..4c776c54 100644
+index 68577a9..6bce4d4 100644
 --- a/modules/bar/ControlsButton.qml
 +++ b/modules/bar/ControlsButton.qml
-@@ -23,17 +23,56 @@ Item {
-     // Popup visibility state (tracks intent, not animation)
-     property bool popupOpen: controlsPopup.isOpen
- 
--    Layout.preferredWidth: 36
--    Layout.preferredHeight: 36
-+    readonly property int buttonSize: 36
-+    readonly property int buttonStep: buttonSize + 4
-+    readonly property int leadingSpace: 2 * buttonStep + (bluetoothBattery.visible ? buttonStep : 0)
-+
-+    Layout.preferredWidth: buttonSize + (vertical ? 0 : leadingSpace)
-+    Layout.preferredHeight: buttonSize + (vertical ? leadingSpace : 0)
-     Layout.fillWidth: vertical
+@@ -29,11 +29,13 @@ Item {
      Layout.fillHeight: !vertical
  
-+    // Keep these buttons together when Ambxst reorders mod widgets.
-+    NetworkIndicator {
-+        bar: root.bar
-+        layerEnabled: root.layerEnabled
-+        startRadius: root.startRadius
-+        endRadius: root.endRadius
-+        width: root.vertical ? root.width : root.buttonSize
-+        height: root.vertical ? root.buttonSize : root.height
-+    }
-+
-+    BluetoothIndicator {
-+        bar: root.bar
-+        layerEnabled: root.layerEnabled
-+        startRadius: root.endRadius
-+        endRadius: root.endRadius
-+        x: root.vertical ? 0 : root.buttonStep
-+        y: root.vertical ? root.buttonStep : 0
-+        width: root.vertical ? root.width : root.buttonSize
-+        height: root.vertical ? root.buttonSize : root.height
-+    }
-+
-+    BluetoothBatteryIndicator {
-+        id: bluetoothBattery
-+        bar: root.bar
-+        layerEnabled: root.layerEnabled
-+        startRadius: root.endRadius
-+        endRadius: root.endRadius
-+        x: root.vertical ? 0 : 2 * root.buttonStep
-+        y: root.vertical ? 2 * root.buttonStep : 0
-+        width: root.vertical ? root.width : root.buttonSize
-+        height: root.vertical ? root.buttonSize : root.height
-+    }
-+
      StyledToolTip {
 +        parent: buttonBg
          show: root.isHovered && !root.popupOpen
@@ -1276,12 +1258,8 @@ index 68577a92..4c776c54 100644
          onHoveredChanged: root.isHovered = hovered
      }
  
-@@ -42,12 +81,14 @@ Item {
-         id: buttonBg
-         variant: root.popupOpen ? "primary" : "bg"
+@@ -44,10 +46,10 @@ Item {
          anchors.fill: parent
-+        anchors.leftMargin: root.vertical ? 0 : root.leadingSpace
-+        anchors.topMargin: root.vertical ? root.leadingSpace : 0
          enableShadow: root.layerEnabled
  
 -        topLeftRadius: root.vertical ? root.startRadius : root.startRadius
@@ -1295,7 +1273,7 @@ index 68577a92..4c776c54 100644
  
          Rectangle {
              anchors.fill: parent
-@@ -87,166 +128,176 @@ Item {
+@@ -87,166 +89,176 @@ Item {
          }
      }
  
