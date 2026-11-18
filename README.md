@@ -23,3 +23,8 @@ A collection of mods for [Ambxst](https://github.com/Axenide/Ambxst), a modular 
 ### 4. [Display Mode Switcher (`display-mode-switcher`)](./display-mode-switcher)
 * **ID**: `mnojz.displaymode`
 * **Description**: Shell-native four-mode laptop projection menu for Hyprland Lua, with target selection, verified asynchronous switching, and unplug recovery.
+
+### 5. [Ambxst Cadence](./cadence)
+
+Mod ID `mnojz.cadence`. Staged shell startup and reload, fullscreen transitions,
+themed farewells, and Wi-Fi and Bluetooth controls on the bar.

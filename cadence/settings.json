@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "fields": [
+    {
+      "key": "settingsFloatWidth",
+      "label": "Settings window width",
+      "description": "Percent of the display. Applies the next time Settings opens.",
+      "type": "integer",
+      "default": 41,
+      "minimum": 20,
+      "maximum": 100,
+      "restartRequired": false
+    },
+    {
+      "key": "settingsFloatHeight",
+      "label": "Settings window height",
+      "description": "Percent of the display. Applies the next time Settings opens.",
+      "type": "integer",
+      "default": 66,
+      "minimum": 20,
+      "maximum": 100,
+      "restartRequired": false
+    }
+  ]
+}

@@ -1,0 +1,159 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Axenide/Ambxst/dev/docs/mods/manifest.schema.json",
+  "manifestVersion": 1,
+  "id": "mnojz.cadence",
+  "name": "Ambxst Cadence",
+  "version": "4.1.2",
+  "description": "Staged startup and reload, smoother fullscreen transitions, and themed farewells for power off and reboot. Adds Wi-Fi and Bluetooth controls, connected-device battery levels, and update notifications to Ambxst.",
+  "license": "MIT",
+  "author": "mnojz",
+  "authorUrl": "https://github.com/mnojz",
+  "homepage": "https://github.com/mnojz/ambxstMod/tree/main/cadence",
+  "compatibility": {
+    "api": 1,
+    "ambxst": ">=1.3.15 <2.0.0",
+    "testedBaseCommits": [
+      "a3b5d977591c4eca2e48868c9f0ac04c63a3a23e"
+    ]
+  },
+  "dependencies": [],
+  "conflicts": [
+    "drpezzer.roadie",
+    "drpezzer.clean-load",
+    "drpezzer.multi-monitor-fixes",
+    "drpezzer.mod-updater",
+    "drpezzer.settings-float",
+    "drpezzer.bar-glance"
+  ],
+  "commands": [
+    "setsid",
+    "nmcli",
+    "pgrep"
+  ],
+  "permissions": [
+    "Spawns a small detached helper (the veil) that draws the wallpaper and frame while the shell restarts",
+    "Runs `ambxst reload`, and the power menu's reboot or power off command, when you ask for them",
+    "On Hyprland, retunes the window animation with `hyprctl eval` during a transition, then restores it",
+    "Shows a desktop notification when Ambxst finds new mod versions",
+    "Controls Bluetooth adapters and devices (BlueZ)",
+    "At shell start, ends orphaned nmcli monitor processes from an earlier Ambxst daemon",
+    "Launches blueman-manager from the Bluetooth widget",
+    "Adds the bar.systrayExclude config key",
+    "Keeps its options in ~/.config/ambxst/mods/mnojz.cadence.json and small state files in ~/.local/state/ambxst and ~/.cache/ambxst",
+    "Lists Wi-Fi, IP details, saved profiles and VPNs using NetworkManager. Changes connections or opens nm-connection-editor on request."
+  ],
+  "operations": [
+    {
+      "type": "overlay",
+      "source": "payload/modules/bar/BluetoothBatteryIndicator.qml",
+      "target": "modules/bar/BluetoothBatteryIndicator.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/bar/BluetoothDeviceRow.qml",
+      "target": "modules/bar/BluetoothDeviceRow.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/bar/BluetoothFlyout.qml",
+      "target": "modules/bar/BluetoothFlyout.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/bar/BluetoothIndicator.qml",
+      "target": "modules/bar/BluetoothIndicator.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/bar/NetworkFlyout.qml",
+      "target": "modules/bar/NetworkFlyout.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/bar/BarRadioHeader.qml",
+      "target": "modules/bar/BarRadioHeader.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/bar/NetworkIndicator.qml",
+      "target": "modules/bar/NetworkIndicator.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/components/BarPopout.qml",
+      "target": "modules/components/BarPopout.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/components/CadencePanelPopup.qml",
+      "target": "modules/components/CadencePanelPopup.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/notch/FarewellQuote.qml",
+      "target": "modules/notch/FarewellQuote.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/BarSlideSync.qml",
+      "target": "modules/services/BarSlideSync.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/BluetoothBattery.qml",
+      "target": "modules/services/BluetoothBattery.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/BluetoothControl.qml",
+      "target": "modules/services/BluetoothControl.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/ModUpdateService.qml",
+      "target": "modules/services/ModUpdateService.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/CadenceDdc.qml",
+      "target": "modules/services/CadenceDdc.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/CadenceSettings.qml",
+      "target": "modules/services/CadenceSettings.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/ShellFarewell.qml",
+      "target": "modules/services/ShellFarewell.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/ShellTransitions.qml",
+      "target": "modules/services/ShellTransitions.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/cadence_nmcli_reap.sh",
+      "target": "modules/services/cadence_nmcli_reap.sh"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/services/veil/Veil.qml",
+      "target": "modules/services/veil/Veil.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/shell/BarFlyout.qml",
+      "target": "modules/shell/BarFlyout.qml"
+    },
+    {
+      "type": "patch",
+      "source": "patches/cadence.patch"
+    }
+  ],
+  "settings": {
+    "schema": "settings.json"
+  }
+}
