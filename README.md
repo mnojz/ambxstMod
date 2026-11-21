@@ -28,3 +28,9 @@ A collection of mods for [Ambxst](https://github.com/Axenide/Ambxst), a modular 
 
 Mod ID `mnojz.cadence`. Staged shell startup and reload, fullscreen transitions,
 themed farewells, and Wi-Fi and Bluetooth controls on the bar.
+
+### 6. [Lock Screen Customizer](./lockscreen-customizer)
+
+Mod ID `mnojz.lockscreen-customizer`. Adds a Lock Screen settings tab with image,
+slideshow, and video wallpapers, plus presets and controls for the clock,
+media player, and login panel.

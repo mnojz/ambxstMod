@@ -34,8 +34,8 @@ Cadence. Cadence carries over your saved Settings window dimensions.
   or manage saved profiles and VPNs. Right-click to open Network Connections.
 - **Bluetooth.** Click the Bluetooth icon to manage devices. Click the battery
   gauge to see charge levels for connected devices.
-- **Power.** Choose Power Off or Reboot from the notch. The farewell plays as
-  the system starts shutting down or restarting.
+- **Power.** Choose Power Off or Reboot from the notch. The farewell plays
+  before the system shuts down or restarts.
 - **Mod updates.** Enable **Scheduled checks** in **Settings → Mods** to get
   desktop notifications when Ambxst finds updates in the background.
 

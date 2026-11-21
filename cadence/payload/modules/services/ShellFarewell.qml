@@ -7,14 +7,14 @@ import qs.modules.services
 
 // Ambxst Cadence (mnojz.cadence): the farewell.
 //
-// Power Off and Reboot request the system action as the farewell starts.
-// The animation runs while the system prepares to leave. Only previews
-// wait for the full reading pause and can be cancelled with Escape.
+// Show the farewell before requesting Power Off or Reboot so the compositor
+// stays up long enough to render it. Previews use a longer reading pause.
 Singleton {
     id: root
 
     readonly property int farewellDuration: 450
     readonly property int farewellHold: 1500
+    readonly property int powerHold: 800
 
     readonly property string shutdownMessage: "hasta la vista baby"
     readonly property string rebootMessage: "wait for me, i'll be right back"
@@ -62,8 +62,6 @@ Singleton {
         console.log("ShellFarewell:", kind, root.dryRun ? "(preview)" : "", "--", root.quote);
         backOut.stop();
         timeline.restart();
-        if (!root.dryRun)
-            root.commit();
         return true;
     }
 
@@ -77,7 +75,7 @@ Singleton {
     }
 
     function cancel() {
-        if (!root.active || root.backingOut || (root.committed && !root.dryRun))
+        if (!root.active || root.backingOut || !root.dryRun)
             return;
         root.retreat();
     }
@@ -141,13 +139,15 @@ Singleton {
             script: root.holding = root.dryRun
         }
         PauseAnimation {
-            duration: root.dryRun ? root.holdMs : 0
+            duration: root.dryRun ? root.holdMs : root.powerHold
         }
         ScriptAction {
             script: {
                 root.holding = false;
                 if (root.dryRun)
                     root.finishPreview();
+                else
+                    root.commit();
             }
         }
     }

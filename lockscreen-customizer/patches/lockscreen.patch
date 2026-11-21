@@ -1,0 +1,1340 @@
+diff --git a/config/Config.qml b/config/Config.qml
+index 36df7905edf70c9c8ea063a6d34b24354a0e13df..65bc2890becc0d074ecda5fb7f85e4a34b29ba70 100644
+--- a/config/Config.qml
++++ b/config/Config.qml
+@@ -87,6 +87,13 @@
+                     root,
+                     "presetCopyProcess-" + modules[i]
+                 );
++                if (fileName === "lockscreen.json") {
++                    proc.exited.connect(() => {
++                        if (!root.lockscreenReady)
++                            lockscreenLoader.reload();
++                        proc.destroy();
++                    });
++                }
+                 proc.running = true;
+             } catch (e) {
+                 console.log("Failed to copy preset " + fileName + ": " + e);
+@@ -920,6 +927,13 @@
+     // ============================================
+     // LOCKSCREEN MODULE
+     // ============================================
++    // Presets update several fields at once. Save the complete selection in one write.
++    Timer {
++        id: lockscreenSaveTimer
++        interval: 150
++        onTriggered: lockscreenLoader.writeAdapter()
++    }
++
+     FileView {
+         id: lockscreenLoader
+         path: root.configDir + "/lockscreen.json"
+@@ -940,6 +954,8 @@
+             }
+         }
+         onFileChanged: {
++            if (lockscreenSaveTimer.running)
++                return;
+             root.pauseAutoSave = true;
+             reload();
+             root.pauseAutoSave = false;
+@@ -947,12 +963,108 @@
+         onPathChanged: reload()
+         onAdapterUpdated: {
+             if (root.lockscreenReady && !root.pauseAutoSave) {
+-                lockscreenLoader.writeAdapter();
++                lockscreenSaveTimer.restart();
+             }
+         }
+ 
+         adapter: JsonAdapter {
+             property string position: "bottom"
++            property string wallpaperMode: "desktop"
++            property string wallpaperImage: ""
++            property list<var> wallpaperImages: []
++            property string wallpaperVideo: ""
++            property int wallpaperInterval: 30
++            property int wallpaperDim: 25
++            property int wallpaperBlur: 0
++            property string clockStyle: "offset"
++            property string clockFont: "League Gothic"
++            property int clockSize: 240
++            property string clockPosition: "center-center"
++            property string clockFormat: "shell"
++            property string clockColor: "theme"
++            property string mediaPosition: "legacy"
++            property int mediaScale: 100
++            property bool mediaVisible: true
++            property bool mediaArtwork: true
++            property string loginPosition: "legacy"
++            property int loginScale: 100
++            property bool loginAvatar: true
++            property string loginStyle: "bg"
++            property real clockX: -1.0
++            property real clockY: -1.0
++            property bool clockDate: false
++            property bool clockBold: false
++            property real mediaX: -1.0
++            property real mediaY: -1.0
++            property string mediaStyle: "bg"
++            property real loginX: -1.0
++            property real loginY: -1.0
++            property list<var> shortcuts: []
++        }
++    }
++
++    // Store custom lock screen preferences outside the shell preset's config directory.
++    property var customLockscreenData: null
++    readonly property var customLockscreen: customLockscreenData ?? lockscreen
++    property var pendingLockscreenWrite: null
++    property bool customLockscreenMissing: false
++
++    function migrateLockscreenSettings() {
++        if (customLockscreenMissing && lockscreenReady && customLockscreenData === null)
++            saveCustomLockscreen({});
++    }
++
++    onLockscreenReadyChanged: migrateLockscreenSettings()
++
++    function saveCustomLockscreen(changes) {
++        if (pendingLockscreenWrite !== null)
++            return false;
++        const values = {};
++        for (const key of Object.keys(LockscreenDefaults.data)) {
++            const value = changes[key] ?? customLockscreen[key];
++            values[key] = Array.isArray(LockscreenDefaults.data[key]) ? Array.from(value) : value;
++        }
++        pendingLockscreenWrite = values;
++        customLockscreenFile.setText(JSON.stringify(values, null, 2) + "\n");
++        return customLockscreenData === values;
++    }
++
++    FileView {
++        id: customLockscreenFile
++        path: root.configDir.slice(0, root.configDir.lastIndexOf("/")) + "/lockscreen-customizer.json"
++        atomicWrites: true
++        blockWrites: true
++        blockLoading: true
++        preload: true
++        printErrors: false
++
++        onLoaded: {
++            try {
++                root.customLockscreenData = ConfigValidator.validate(JSON.parse(text()), LockscreenDefaults.data);
++                root.customLockscreenMissing = false;
++            } catch (error) {
++                console.warn("Could not read Lock Screen Customizer settings:", error);
++            }
++        }
++
++        onLoadFailed: error => {
++            if (error === FileViewError.FileNotFound) {
++                root.customLockscreenMissing = true;
++                root.migrateLockscreenSettings();
++            }
++        }
++
++        onSaved: {
++            if (root.pendingLockscreenWrite !== null) {
++                root.customLockscreenData = root.pendingLockscreenWrite;
++                root.pendingLockscreenWrite = null;
++                root.customLockscreenMissing = false;
++            }
++        }
++
++        onSaveFailed: error => {
++            root.pendingLockscreenWrite = null;
++            console.warn("Could not save Lock Screen Customizer settings:", error);
+         }
+     }
+ 
+diff --git a/config/defaults/lockscreen.js b/config/defaults/lockscreen.js
+index b06cbea97f9bf227a462b58d0358ff307d306db3..b15ecde9da04af2325ed3367184664b0a287bbab 100644
+--- a/config/defaults/lockscreen.js
++++ b/config/defaults/lockscreen.js
+@@ -1,5 +1,36 @@
+ .pragma library
+ 
+ var data = {
+-    "position": "bottom"
++    "position": "bottom",
++    "wallpaperMode": "desktop",
++    "wallpaperImage": "",
++    "wallpaperImages": [],
++    "wallpaperVideo": "",
++    "wallpaperInterval": 30,
++    "wallpaperDim": 25,
++    "wallpaperBlur": 0,
++    "clockStyle": "offset",
++    "clockFont": "League Gothic",
++    "clockSize": 240,
++    "clockPosition": "center-center",
++    "clockFormat": "shell",
++    "clockColor": "theme",
++    "mediaPosition": "legacy",
++    "mediaScale": 100,
++    "mediaVisible": true,
++    "mediaArtwork": true,
++    "loginPosition": "legacy",
++    "loginScale": 100,
++    "loginAvatar": true,
++    "loginStyle": "bg",
++    "clockX": -1.0,
++    "clockY": -1.0,
++    "clockDate": false,
++    "clockBold": false,
++    "mediaX": -1.0,
++    "mediaY": -1.0,
++    "mediaStyle": "bg",
++    "loginX": -1.0,
++    "loginY": -1.0,
++    "shortcuts": []
+ }
+diff --git a/modules/lockscreen/LockScreen.qml b/modules/lockscreen/LockScreen.qml
+index c8ffe5dde5a5389241a6d4b70c4dc08c32b6562d..86fb472fecd4ab1267deaa1b242161fd83a3b2a9 100644
+--- a/modules/lockscreen/LockScreen.qml
++++ b/modules/lockscreen/LockScreen.qml
+@@ -1,646 +1,69 @@
+ pragma ComponentBehavior: Bound
+ import QtQuick
+-import QtQuick.Controls
+-import QtQuick.Layouts
+-import QtQuick.Effects
+ import Quickshell
+ import Quickshell.Io
+ import Quickshell.Services.Pam
+ import Quickshell.Wayland
+-import qs.modules.components
+-import qs.modules.corners
++import qs.modules.globals
+ import qs.modules.theme
+-import qs.modules.globals
+-import qs.modules.widgets.dashboard.widgets
+ import qs.config
+ 
+-// Lock surface UI - shown on each screen when locked
+ WlSessionLockSurface {
+     id: root
+ 
+-    property bool startAnim: false
+     property bool authenticating: false
+     property string errorMessage: ""
+     property int failLockSecondsLeft: 0
+ 
+-    // Always transparent - blur background handles the visuals
+-    color: "transparent"
++    color: Colors.surfaceContainer
+ 
+-    // Wallpaper background con Blur integrado
+-    TintedWallpaper {
+-        id: wallpaperBackground
++    LockscreenSlide {
++        id: slide
+         anchors.fill: parent
+-        z: 1
+-        radius: 0
+-        tintEnabled: GlobalStates.wallpaperManager ? GlobalStates.wallpaperManager.tintEnabled : false
++        duration: Config.animDuration > 0 ? Math.max(180, Math.min(600, Config.animDuration * 2)) : 0
++        desktopPath: {
++            const manager = root.screen ? GlobalStates.wallpaperForScreen(root.screen.name) : GlobalStates.wallpaperManager;
++            const path = manager?.effectiveWallpaper || manager?.currentWallpaper || "";
++            return manager?.getLockscreenFramePath ? manager.getLockscreenFramePath(path) : path;
++        }
++        onExited: GlobalStates.lockscreenVisible = false
+ 
+-        property string wallpaperPath: {
+-            var wp = root.screen ? GlobalStates.wallpaperForScreen(root.screen.name) : GlobalStates.wallpaperManager;
+-            return wp ? wp.effectiveWallpaper : "";
+-        }
++        LockscreenScene {
++            id: scene
++            anchors.fill: parent
++            screen: root.screen
++            authenticating: root.authenticating
++            username: usernameCollector.text.trim()
+ 
+-        source: wallpaperPath ? "file://" + wallpaperPath : ""
++            onHasCustomBackgroundChanged: {
++                if (hasCustomBackground && entryDelay.running)
++                    root.showLockscreen();
++            }
+ 
+-        onSourceChanged: {
+-            if (startAnim)
+-                root.syncLockscreenVideo();
+-        }
++            onPasswordSubmitted: password => {
++                if (root.authenticating)
++                    return;
++                authPasswordHolder.password = password;
++                root.authenticating = true;
++                root.errorMessage = "";
++                pamAuth.start();
++            }
+ 
+-        // Animación de opacidad (visibilidad)
+-        opacity: startAnim ? 1 : 0
+-        visible: true
+-
+-        Behavior on opacity {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutQuint
+-            }
+-        }
+-
+-        // Efecto de Blur y Zoom mediante capa
+-        layer.enabled: true
+-        layer.effect: MultiEffect {
+-            blurEnabled: true
+-            blur: startAnim ? 1 : 0
+-            blurMax: 64
+-        }
+-
+-        // Zoom animation
+-        property real zoomScale: startAnim ? 1.25 : 1.0
+-        transform: Scale {
+-            origin.x: wallpaperBackground.width / 2
+-            origin.y: wallpaperBackground.height / 2
+-            xScale: wallpaperBackground.zoomScale
+-            yScale: wallpaperBackground.zoomScale
+-        }
+-
+-        Behavior on zoomScale {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutExpo
+-            }
++            onRejectionFinished: root.authenticating = false
+         }
+     }
+ 
+-    function backgroundWallpaper() {
+-        return root.screen ? GlobalStates.wallpaperForScreen(root.screen.name) : GlobalStates.wallpaperManager;
++    function showLockscreen() {
++        entryDelay.stop();
++        slide.enter();
++        scene.focusPassword();
+     }
+ 
+-    function syncLockscreenVideo() {
+-        if (!wallpaperBackground.isVideo)
+-            return;
+-        var wp = backgroundWallpaper();
+-        var targetPos = (wp && wp.activeVideo) ? wp.activeVideo.positionMs : 0;
+-        wallpaperBackground.videoPlayAt(targetPos);
++    Timer {
++        id: entryDelay
++        interval: scene.customWallpaper && !scene.hasCustomBackground && slide.duration > 0 ? 280 : 1
++        onTriggered: root.showLockscreen()
+     }
+-
+-    onStartAnimChanged: {
+-        if (startAnim)
+-            syncLockscreenVideo();
+-    }
+-
+-    // Follow the background video while locked (seek to 0 on wallpaper sync)
+-    Connections {
+-        target: GlobalStates
+-        function onVideoSyncTickChanged() {
+-            if (!wallpaperBackground.isVideo)
+-                return;
+-            wallpaperBackground.videoSeek(0);
+-            wallpaperBackground.videoPlay();
+-        }
+-    }
+-
+-    // Soft drift correction against the background video
+-    Timer {
+-        id: videoDriftTimer
+-        interval: 15000
+-        running: startAnim && wallpaperBackground.isVideo
+-        repeat: true
+-        onTriggered: {
+-            var wp = backgroundWallpaper();
+-            if (!wp || !wp.activeVideo || !wallpaperBackground.isVideo)
+-                return;
+-            var diff = Math.abs(wallpaperBackground.videoPosition - wp.activeVideo.positionMs);
+-            if (diff > 1500)
+-                wallpaperBackground.videoSeek(wp.activeVideo.positionMs);
+-        }
+-    }
+-
+-    // Screen capture background (fondo absoluto con zoom sincronizado)
+-    ScreencopyView {
+-        id: screencopyBackground
+-        anchors.fill: parent
+-        captureSource: root.screen
+-        live: false
+-        paintCursor: false
+-        visible: startAnim  // Visible solo cuando startAnim es true
+-        z: 0  // Capa más baja - fondo absoluto
+-
+-        property real zoomScale: startAnim ? 1.25 : 1.0
+-
+-        transform: Scale {
+-            origin.x: screencopyBackground.width / 2
+-            origin.y: screencopyBackground.height / 2
+-            xScale: screencopyBackground.zoomScale
+-            yScale: screencopyBackground.zoomScale
+-        }
+-
+-        Behavior on zoomScale {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutExpo
+-            }
+-        }
+-    }
+-
+-    // Overlay for dimming
+-    Rectangle {
+-        id: dimOverlay
+-        anchors.fill: parent
+-        color: "black"
+-        opacity: startAnim ? 0.25 : 0
+-        z: 3
+-
+-        property real zoomScale: startAnim ? 1.1 : 1.0
+-
+-        transform: Scale {
+-            origin.x: dimOverlay.width / 2
+-            origin.y: dimOverlay.height / 2
+-            xScale: dimOverlay.zoomScale
+-            yScale: dimOverlay.zoomScale
+-        }
+-
+-        Behavior on opacity {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutQuint
+-            }
+-        }
+-
+-        Behavior on zoomScale {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutExpo
+-            }
+-        }
+-    }
+-
+-    // Clock (center)
+-    Item {
+-        id: clockContainer
+-        anchors.centerIn: parent
+-        width: clockRow.width
+-        height: hoursText.height + (hoursText.height * 0.5)
+-        z: 10
+-
+-        property date currentTime: new Date()
+-
+-        Row {
+-            id: clockRow
+-            spacing: 0
+-            anchors.top: parent.top
+-
+-            Text {
+-                id: hoursText
+-                text: Config.bar.use12hFormat ? (clockContainer.currentTime.getHours() % 12 || 12).toString() : Qt.formatTime(clockContainer.currentTime, "hh")
+-                font.family: "League Gothic"
+-                font.pixelSize: 240
+-                color: Colors.primaryFixed
+-                antialiasing: true
+-                opacity: startAnim ? 1 : 0
+-
+-                property real slideOffset: startAnim ? 0 : -150
+-
+-                transform: Translate {
+-                    y: hoursText.slideOffset
+-                }
+-
+-                layer.enabled: true
+-                layer.effect: BgShadow {}
+-
+-                Behavior on opacity {
+-                    enabled: Config.animDuration > 0
+-                    NumberAnimation {
+-                        duration: Config.animDuration * 2
+-                        easing.type: Easing.OutExpo
+-                    }
+-                }
+-
+-                Behavior on slideOffset {
+-                    enabled: Config.animDuration > 0
+-                    NumberAnimation {
+-                        duration: Config.animDuration * 2
+-                        easing.type: Easing.OutExpo
+-                    }
+-                }
+-            }
+-
+-            Text {
+-                id: minutesText
+-                text: Qt.formatTime(clockContainer.currentTime, "mm")
+-                font.family: "League Gothic"
+-                font.pixelSize: 240
+-                color: Colors.primaryFixedDim
+-                antialiasing: true
+-                anchors.verticalCenter: undefined
+-                anchors.top: hoursText.top
+-                anchors.topMargin: hoursText.height * 0.5
+-                opacity: startAnim ? 1 : 0
+-
+-                property real slideOffset: startAnim ? 0 : 150
+-
+-                transform: Translate {
+-                    y: minutesText.slideOffset
+-                }
+-
+-                layer.enabled: true
+-                layer.effect: BgShadow {}
+-
+-                Behavior on opacity {
+-                    enabled: Config.animDuration > 0
+-                    NumberAnimation {
+-                        duration: Config.animDuration * 2
+-                        easing.type: Easing.OutExpo
+-                    }
+-                }
+-
+-                Behavior on slideOffset {
+-                    enabled: Config.animDuration > 0
+-                    NumberAnimation {
+-                        duration: Config.animDuration * 2
+-                        easing.type: Easing.OutExpo
+-                    }
+-                }
+-            }
+-
+-            Text {
+-                id: amPmText
+-                text: Config.bar.use12hFormat ? Qt.formatTime(clockContainer.currentTime, "ap").toLowerCase() : ""
+-                font.family: "League Gothic"
+-                font.pixelSize: 100
+-                color: hoursText.color
+-                antialiasing: true
+-                anchors.top: hoursText.top
+-                anchors.topMargin: hoursText.height * 0.35 
+-                visible: Config.bar.use12hFormat
+-                opacity: startAnim ? 1 : 0
+-
+-                property real slideOffset: startAnim ? 0 : -150
+-
+-                transform: Translate {
+-                    y: amPmText.slideOffset
+-                }
+-
+-                layer.enabled: true
+-                layer.effect: BgShadow {}
+-
+-                Behavior on opacity {
+-                    enabled: Config.animDuration > 0
+-                    NumberAnimation {
+-                        duration: Config.animDuration * 2
+-                        easing.type: Easing.OutExpo
+-                    }
+-                }
+-
+-                Behavior on slideOffset {
+-                    enabled: Config.animDuration > 0
+-                    NumberAnimation {
+-                        duration: Config.animDuration * 2
+-                        easing.type: Easing.OutExpo
+-                    }
+-                }
+-            }
+-        }
+-
+-        Timer {
+-            interval: 1000
+-            running: true
+-            repeat: true
+-            onTriggered: clockContainer.currentTime = new Date()
+-        }
+-    }
+-
+-    // Music player (slides from left)
+-    Item {
+-        id: playerContainer
+-        z: 10
+-
+-        property bool isTopPosition: Config.lockscreen.position === "top"
+-
+-        anchors {
+-            left: parent.left
+-            leftMargin: startAnim ? 32 : -(playerContainer.width + 64)
+-            top: isTopPosition ? parent.top : undefined
+-            topMargin: isTopPosition ? 32 : 0
+-            bottom: !isTopPosition ? parent.bottom : undefined
+-            bottomMargin: !isTopPosition ? 32 : 0
+-        }
+-        width: 350
+-        height: playerContent.height
+-
+-        opacity: startAnim ? 1 : 0
+-
+-        Behavior on anchors.leftMargin {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutExpo
+-            }
+-        }
+-
+-        Behavior on opacity {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutQuad
+-            }
+-        }
+-
+-        LockPlayer {
+-            id: playerContent
+-            width: parent.width
+-        }
+-    }
+-
+-    // Password input container (slides from top or bottom)
+-    Item {
+-        id: passwordContainer
+-        z: 10
+-
+-        property bool isTopPosition: Config.lockscreen.position === "top"
+-
+-        anchors {
+-            horizontalCenter: parent.horizontalCenter
+-            top: isTopPosition ? parent.top : undefined
+-            topMargin: isTopPosition ? (startAnim ? 32 : -80) : 0
+-            bottom: !isTopPosition ? parent.bottom : undefined
+-            bottomMargin: !isTopPosition ? (startAnim ? 32 : -80) : 0
+-        }
+-        width: 350
+-        height: 96
+-
+-        opacity: startAnim ? 1 : 0
+-        scale: startAnim ? 1 : 0.92
+-
+-        Behavior on anchors.topMargin {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutExpo
+-            }
+-        }
+-
+-        Behavior on anchors.bottomMargin {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutExpo
+-            }
+-        }
+-
+-        Behavior on opacity {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutQuad
+-            }
+-        }
+-
+-        Behavior on scale {
+-            enabled: Config.animDuration > 0
+-            NumberAnimation {
+-                duration: Config.animDuration * 2
+-                easing.type: Easing.OutBack
+-                easing.overshoot: 1.2
+-            }
+-        }
+-
+-        // Password input with avatar
+-        StyledRect {
+-            id: passwordInputBox
+-            variant: "bg"
+-            anchors.centerIn: parent
+-            width: parent.width
+-            height: 96
+-            radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+-
+-            property real shakeOffset: 0
+-            property bool showError: false
+-
+-            transform: Translate {
+-                x: passwordInputBox.shakeOffset
+-            }
+-
+-            Row {
+-                anchors.fill: parent
+-                anchors.leftMargin: 16
+-                anchors.rightMargin: 24
+-                spacing: 12
+-
+-                // Avatar (64x64)
+-                Rectangle {
+-                    id: avatarContainer
+-                    width: 64
+-                    height: 64
+-                    radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+-                    color: "transparent"
+-                    anchors.verticalCenter: parent.verticalCenter
+-
+-                    Image {
+-                        mipmap: true
+-                        id: userAvatar
+-                        anchors.fill: parent
+-                        source: `file://${Quickshell.env("HOME")}/.face.icon`
+-                        fillMode: Image.PreserveAspectCrop
+-                        smooth: true
+-                        asynchronous: true
+-                        visible: status === Image.Ready
+-
+-                        layer.enabled: true
+-                        layer.effect: MultiEffect {
+-                            maskEnabled: true
+-                            maskThresholdMin: 0.5
+-                            maskSpreadAtMin: 1.0
+-                            maskSource: ShaderEffectSource {
+-                                sourceItem: Rectangle {
+-                                    width: userAvatar.width
+-                                    height: userAvatar.height
+-                                    radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+-                                }
+-                            }
+-                        }
+-                    }
+-
+-                    // Fallback icon if image not found
+-                    Text {
+-                        anchors.centerIn: parent
+-                        text: "👤"
+-                        font.pixelSize: 32
+-                        visible: userAvatar.status !== Image.Ready
+-                    }
+-                }
+-
+-                // Password field
+-                StyledRect {
+-                    id: passwordFieldBg
+-                    width: parent.width - avatarContainer.width - parent.spacing
+-                    height: 48
+-                    anchors.verticalCenter: parent.verticalCenter
+-                    variant: passwordInputBox.showError ? "error" : "common"
+-                    radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+-
+-                    RowLayout {
+-                        anchors.fill: parent
+-                        anchors.leftMargin: 16
+-                        anchors.rightMargin: 32
+-                        spacing: 8
+-
+-                        // User icon / Spinner
+-                        Text {
+-                            id: userIcon
+-                            text: authenticating ? Icons.circleNotch : Icons.user
+-                            font.family: Icons.font
+-                            font.pixelSize: 24
+-                            color: passwordFieldBg.item
+-                            Layout.preferredWidth: 24
+-                            Layout.preferredHeight: 24
+-                            Layout.alignment: Qt.AlignVCenter
+-                            z: 10
+-                            rotation: 0
+-
+-                            Behavior on color {
+-                                enabled: Config.animDuration > 0
+-                                ColorAnimation {
+-                                    duration: Config.animDuration
+-                                    easing.type: Easing.OutCubic
+-                                }
+-                            }
+-
+-                            Timer {
+-                                id: spinnerTimer
+-                                interval: 100
+-                                repeat: true
+-                                running: authenticating
+-                                onTriggered: {
+-                                    userIcon.rotation = (userIcon.rotation + 45) % 360;
+-                                }
+-                            }
+-
+-                            onTextChanged: {
+-                                if (userIcon.text === Icons.user) {
+-                                    userIcon.rotation = 0;
+-                                }
+-                            }
+-                        }
+-
+-                        // Text field
+-                        TextField {
+-                            id: passwordInput
+-                            Layout.fillWidth: true
+-                            Layout.alignment: Qt.AlignVCenter
+-                            placeholderText: usernameCollector.text.trim()
+-                            placeholderTextColor: Qt.rgba(passwordFieldBg.item.r, passwordFieldBg.item.g, passwordFieldBg.item.b, 0.5)
+-                            font.family: Config.theme.font
+-                            font.pixelSize: Styling.fontSize(0)
+-                            color: passwordFieldBg.item
+-                            background: null
+-                            echoMode: TextInput.Password
+-                            verticalAlignment: TextInput.AlignVCenter
+-                            enabled: !authenticating
+-
+-                            Behavior on color {
+-                                enabled: Config.animDuration > 0
+-                                ColorAnimation {
+-                                    duration: Config.animDuration
+-                                    easing.type: Easing.OutCubic
+-                                }
+-                            }
+-
+-                            Behavior on placeholderTextColor {
+-                                enabled: Config.animDuration > 0
+-                                ColorAnimation {
+-                                    duration: Config.animDuration
+-                                    easing.type: Easing.OutQuad
+-                                }
+-                            }
+-
+-                            onAccepted: {
+-                                if (passwordInput.text.trim() === "")
+-                                    return;
+-
+-                                // Guardar contraseña y limpiar campo inmediatamente
+-                                authPasswordHolder.password = passwordInput.text;
+-                                passwordInput.text = "";
+-
+-                                authenticating = true;
+-                                errorMessage = "";
+-                                pamAuth.start();
+-                            }
+-                        }
+-                    }
+-                }
+-            }
+-
+-            SequentialAnimation {
+-                id: wrongPasswordAnim
+-                ScriptAction {
+-                    script: {
+-                        passwordInputBox.showError = true;
+-                    }
+-                }
+-                NumberAnimation {
+-                    target: passwordInputBox
+-                    property: "shakeOffset"
+-                    to: 10
+-                    duration: 50
+-                    easing.type: Easing.InOutQuad
+-                }
+-                NumberAnimation {
+-                    target: passwordInputBox
+-                    property: "shakeOffset"
+-                    to: -10
+-                    duration: 100
+-                    easing.type: Easing.InOutQuad
+-                }
+-                NumberAnimation {
+-                    target: passwordInputBox
+-                    property: "shakeOffset"
+-                    to: 10
+-                    duration: 100
+-                    easing.type: Easing.InOutQuad
+-                }
+-                NumberAnimation {
+-                    target: passwordInputBox
+-                    property: "shakeOffset"
+-                    to: 0
+-                    duration: 50
+-                    easing.type: Easing.InOutQuad
+-                }
+-                ScriptAction {
+-                    script: {
+-                        passwordInput.text = "";
+-                        authenticating = false;
+-                        passwordInputBox.showError = false;
+-                    }
+-                }
+-            }
+-        }
+-    }
+-
+-// Timer to unlock after exit animation
+-Timer {
+-    id: unlockTimer
+-    // A Timer with interval 0 never fires in Qt; ensure a minimum interval
+-    interval: Config.animDuration > 0 ? Config.animDuration * 2 : 1
+-    onTriggered: {
+-        GlobalStates.lockscreenVisible = false;
+-    }
+-}
+ 
+     // Processes for user info
+     Process {
+@@ -731,73 +154,16 @@
+             authPasswordHolder.password = "";
+ 
+             if (result === PamResult.Success) {
+-                // Autenticación exitosa - trigger exit animation
+-                startAnim = false;
+-
+-                // Wait for exit animation, then unlock
+-                unlockTimer.start();
+-
+                 errorMessage = "";
+-                authenticating = false;
++                slide.leave();
+             } else {
+                 // Error de autenticación
+                 errorMessage = "Authentication failed";
+                 console.warn("PAM auth failed with result:", result);
+-                if (Config.animDuration > 0) {
+-                    wrongPasswordAnim.start();
+-                } else {
+-                    passwordInput.text = "";
+-                    authenticating = false;
+-                    passwordInputBox.showError = false;
+-                }
++                scene.rejectPassword();
+             }
+         }
+     }
+ 
+-    // Screen corners
+-    RoundCorner {
+-        id: topLeft
+-        size: Styling.radius(4)
+-        anchors.left: parent.left
+-        anchors.top: parent.top
+-        corner: RoundCorner.CornerEnum.TopLeft
+-        z: 100
+-    }
+-
+-    RoundCorner {
+-        id: topRight
+-        size: Styling.radius(4)
+-        anchors.right: parent.right
+-        anchors.top: parent.top
+-        corner: RoundCorner.CornerEnum.TopRight
+-        z: 100
+-    }
+-
+-    RoundCorner {
+-        id: bottomLeft
+-        size: Styling.radius(4)
+-        anchors.left: parent.left
+-        anchors.bottom: parent.bottom
+-        corner: RoundCorner.CornerEnum.BottomLeft
+-        z: 100
+-    }
+-
+-    RoundCorner {
+-        id: bottomRight
+-        size: Styling.radius(4)
+-        anchors.right: parent.right
+-        anchors.bottom: parent.bottom
+-        corner: RoundCorner.CornerEnum.BottomRight
+-        z: 100
+-    }
+-
+-    // Initialize when component is created (when lock becomes active)
+-    Component.onCompleted: {
+-        // Capture screen immediately
+-        screencopyBackground.captureFrame();
+-
+-        // Start animations
+-        startAnim = true;
+-        passwordInput.forceActiveFocus();
+-    }
++    Component.onCompleted: entryDelay.start()
+ }
+diff --git a/modules/widgets/dashboard/controls/SettingsIndex.qml b/modules/widgets/dashboard/controls/SettingsIndex.qml
+index 3fac43fc2662e9b34f629350460088aa7b229d66..af86297425683de0d23b2762e6449c2ce02a72c9 100644
+--- a/modules/widgets/dashboard/controls/SettingsIndex.qml
++++ b/modules/widgets/dashboard/controls/SettingsIndex.qml
+@@ -205,8 +205,7 @@
+         { label: I18n.t("settings.shell.dock_hover_region_height"), keywords: "trigger area pixels", section: 8, subSection: "dock", subLabel: I18n.t("settings.ambxst") + " > " + I18n.t("settings.shell.dock"), icon: Icons.layout, isIcon: true },
+         { label: I18n.t("settings.shell.dock_pinned_on_startup"), keywords: "show visible default", section: 8, subSection: "dock", subLabel: I18n.t("settings.ambxst") + " > " + I18n.t("settings.shell.dock"), icon: Icons.layout, isIcon: true },
+ 
+-        // Ambxst > Lockscreen
+-        { label: I18n.t("settings.shell.lockscreen_entry"), keywords: "lock screen password login", section: 8, subSection: "lockscreen", subLabel: I18n.t("settings.ambxst") + " > " + I18n.t("settings.shell.lockscreen"), icon: Icons.lock, isIcon: true },
++        { label: I18n.t("settings.shell.lockscreen"), keywords: "lock screen wallpaper password login clock time media music", section: 11, subSection: "", subLabel: "", icon: Icons.lock, isIcon: true },
+ 
+         // Ambxst > Desktop
+         { label: I18n.t("settings.shell.desktop_entry"), keywords: "icons wallpaper home", section: 8, subSection: "desktop", subLabel: I18n.t("settings.ambxst") + " > " + I18n.t("settings.shell.desktop"), icon: Icons.layout, isIcon: true },
+diff --git a/modules/widgets/dashboard/controls/SettingsTab.qml b/modules/widgets/dashboard/controls/SettingsTab.qml
+index 57b1660118f6927b6cc82b456b0dbdd5a971b103..c6fbbc68d43f028859cda8fd5696ee18f00603fc 100644
+--- a/modules/widgets/dashboard/controls/SettingsTab.qml
++++ b/modules/widgets/dashboard/controls/SettingsTab.qml
+@@ -21,6 +21,7 @@
+     property int currentSection: 0
+     property int selectedIndex: GlobalStates.settingsCurrentTab
+     property string searchQuery: ""
++    property var lockscreenDraft: ({})
+ 
+     onFilteredSectionsChanged: {
+         // Keep the selection when the list is rebuilt with the same sections
+@@ -75,7 +76,7 @@
+         property int currentPanelIndex: 0
+         property var aggregatedItems: []
+         property bool isIndexing: false
+-        readonly property var panels: contentArea.panelComponents.filter(panel => panel.section !== 10)
++        readonly property var panels: contentArea.panelComponents.filter(panel => panel.component !== "ModsPanel.qml" && panel.component !== "LockscreenPanel.qml")
+ 
+         // Helper to load panels one by one
+         Loader {
+@@ -258,6 +259,12 @@
+             icon: Icons.compositor,
+             label: I18n.t("settings.compositor"),
+             section: 8,
++            isIcon: true
++        },
++        {
++            icon: Icons.lock,
++            label: I18n.t("settings.shell.lockscreen"),
++            section: 11,
+             isIcon: true
+         },
+         {
+@@ -611,6 +618,10 @@
+                 {
+                     component: "ModsPanel.qml",
+                     section: 10
++                },
++                {
++                    component: "LockscreenPanel.qml",
++                    section: 11
+                 }
+             ]
+ 
+@@ -618,13 +629,15 @@
+             Loader {
+                 id: panelLoader
+                 anchors.fill: parent
+-                asynchronous: true
+-                source: contentArea.panelComponents.find(panel => panel.section === root.currentSection)?.component ?? ""
++                readonly property string panelSource: contentArea.panelComponents.find(panel => panel.section === root.currentSection)?.component ?? ""
++                readonly property bool isLockscreenPanel: panelSource === "LockscreenPanel.qml"
++                asynchronous: !isLockscreenPanel
++                source: panelSource
+ 
+                 // Fade in animation
+                 opacity: status === Loader.Ready ? 1 : 0
+                 Behavior on opacity {
+-                    enabled: Config.animDuration > 0
++                    enabled: !panelLoader.isLockscreenPanel && Config.animDuration > 0
+                     NumberAnimation {
+                         duration: Config.animDuration
+                         easing.type: Easing.OutCubic
+@@ -634,6 +647,8 @@
+                 onLoaded: {
+                     if (item) {
+                         item.maxContentWidth = contentArea.maxContentWidth;
++                        if (panelLoader.isLockscreenPanel)
++                            item.draftStore = root;
+                         // Apply pending subsection if any
+                         if (root.pendingSubSection !== "" && item.currentSection !== undefined) {
+                             item.currentSection = root.pendingSubSection;
+diff --git a/modules/widgets/dashboard/controls/ShellPanel.qml b/modules/widgets/dashboard/controls/ShellPanel.qml
+index 9723b55d33c11fd0aa375306596edf3bb70ce56e..8bbde567ba03915599bbda37fc9861a22847a7ff 100644
+--- a/modules/widgets/dashboard/controls/ShellPanel.qml
++++ b/modules/widgets/dashboard/controls/ShellPanel.qml
+@@ -662,10 +662,6 @@
+                             sectionId: "dock"
+                         }
+                         SectionButton {
+-                            text: I18n.t("settings.shell.lockscreen")
+-                            sectionId: "lockscreen"
+-                        }
+-                        SectionButton {
+                             text: I18n.t("settings.shell.desktop")
+                             sectionId: "desktop"
+                         }
+@@ -1596,52 +1592,6 @@
+                     }
+ 
+                     // ═══════════════════════════════════════════════════════════════
+-                    // LOCKSCREEN SECTION
+-                    // ═══════════════════════════════════════════════════════════════
+-                    ColumnLayout {
+-                        visible: root.currentSection === "lockscreen"
+-                        Layout.fillWidth: true
+-                        spacing: 8
+-
+-                        Text {
+-                            text: I18n.t("settings.shell.lockscreen")
+-                            font.family: Config.theme.font
+-                            font.pixelSize: Styling.fontSize(-1)
+-                            font.weight: Font.Medium
+-                            color: Colors.overSurfaceVariant
+-                            Layout.bottomMargin: -4
+-                        }
+-
+-                        SelectorRow {
+-                            label: ""
+-                            options: [
+-                                {
+-                                    label: I18n.t("common.top"),
+-                                    value: "top",
+-                                    icon: Icons.arrowUp
+-                                },
+-                                {
+-                                    label: I18n.t("common.bottom"),
+-                                    value: "bottom",
+-                                    icon: Icons.arrowDown
+-                                }
+-                            ]
+-                            value: Config.lockscreen.position ?? "bottom"
+-                            onValueSelected: newValue => {
+-                                if (newValue !== Config.lockscreen.position) {
+-                                    GlobalStates.markShellChanged();
+-                                    Config.lockscreen.position = newValue;
+-                                }
+-                            }
+-                        }
+-                    }
+-
+-                    Separator {
+-                        Layout.fillWidth: true
+-                        visible: false
+-                    }
+-
+-                    // ═══════════════════════════════════════════════════════════════
+                     // DESKTOP SECTION
+                     // ═══════════════════════════════════════════════════════════════
+                     ColumnLayout {
+diff --git a/modules/widgets/dashboard/widgets/LockPlayer.qml b/modules/widgets/dashboard/widgets/LockPlayer.qml
+index cc1d673e286f551887c5b3e517db70ed626013a5..cf426a4c0dfe9d81040a9c4a4b61eebe1a4e604c 100644
+--- a/modules/widgets/dashboard/widgets/LockPlayer.qml
++++ b/modules/widgets/dashboard/widgets/LockPlayer.qml
+@@ -6,12 +6,22 @@
+ import qs.modules.theme
+ import qs.modules.components
+ import qs.modules.services
++import qs.modules.globals
+ import qs.config
+ 
+ StyledRect {
+     id: lockPlayer
+     variant: "bg"
+ 
++    property bool artworkBackground: true
++    property bool sample: false
++    property bool compact: false
++    property real renderScale: 1
++    readonly property real unscaledHeight: compact ? 76 : 96
++
++    function px(value) {
++        return Math.max(1, Math.round(value * renderScale));
++    }
+     property bool isPlaying: MprisController.activePlayer?.playbackState === MprisPlaybackState.Playing
+     property real position: MprisController.activePlayer?.position ?? 0.0
+     property real length: MprisController.activePlayer?.length ?? 1.0
+@@ -23,10 +33,10 @@
+         return frame ? "file://" + frame : "";
+     }
+ 
+-    visible: MprisController.activePlayer !== null
+-    height: 96
++    visible: sample || MprisController.activePlayer !== null
++    height: unscaledHeight * renderScale
+     radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+-    backgroundOpacity: (MprisController.activePlayer || wallpaperPath !== "") ? 0.0 : 1.0
++    backgroundOpacity: artworkBackground && (MprisController.activePlayer || wallpaperPath !== "") ? 0.0 : 1.0
+ 
+     Behavior on backgroundOpacity {
+         enabled: Config.animDuration > 0
+@@ -38,6 +48,7 @@
+ 
+     // Blurred wallpaper background fallback
+     ClippingRectangle {
++        visible: lockPlayer.artworkBackground
+         anchors.fill: parent
+         radius: lockPlayer.radius
+         color: "transparent"
+@@ -47,7 +58,7 @@
+             id: lockPlayerBgArt
+             sourceSize: Qt.size(64, 64)
+             anchors.fill: parent
+-            source: (MprisController.activePlayer?.trackArtUrl ?? "") !== "" ? MprisController.activePlayer.trackArtUrl : lockPlayer.wallpaperPath
++            source: !lockPlayer.artworkBackground ? "" : (MprisController.activePlayer?.trackArtUrl ?? "") !== "" ? MprisController.activePlayer.trackArtUrl : lockPlayer.wallpaperPath
+             fillMode: Image.PreserveAspectCrop
+             asynchronous: true
+             visible: false
+@@ -79,7 +90,7 @@
+     }
+ 
+     Timer {
+-        running: lockPlayer.isPlaying && lockPlayer.visible
++        running: !lockPlayer.sample && lockPlayer.isPlaying && lockPlayer.visible
+         interval: 1000
+         repeat: true
+         onTriggered: {
+@@ -102,8 +113,8 @@
+     Item {
+         id: noPlayerContainer
+         anchors.fill: parent
+-        anchors.margins: 16
+-        visible: !MprisController.activePlayer && wallpaperPath === ""
++        anchors.margins: lockPlayer.px(16)
++        visible: !lockPlayer.sample && !MprisController.activePlayer && wallpaperPath === ""
+ 
+         Loader {
+             active: noPlayerContainer.visible
+@@ -135,11 +146,12 @@
+ 
+     RowLayout {
+         id: contentLayout
++        enabled: !lockPlayer.sample
+         anchors.fill: parent
+-        anchors.margins: 16
+-        anchors.rightMargin: 28
+-        spacing: 16
+-        visible: MprisController.activePlayer || wallpaperPath !== ""
++        anchors.margins: lockPlayer.px(16)
++        anchors.rightMargin: lockPlayer.px(28)
++        spacing: lockPlayer.px(16)
++        visible: lockPlayer.sample || MprisController.activePlayer || wallpaperPath !== ""
+ 
+         // Album artwork con botón de play/pause superpuesto
+     Connections {
+@@ -153,8 +165,8 @@
+ 
+     Item {
+ 
+-            Layout.preferredWidth: 64
+-            Layout.preferredHeight: 64
++            Layout.preferredWidth: lockPlayer.px(lockPlayer.compact ? 44 : 64)
++            Layout.preferredHeight: lockPlayer.px(lockPlayer.compact ? 44 : 64)
+             Layout.alignment: Qt.AlignVCenter
+ 
+             ClippingRectangle {
+@@ -166,7 +178,7 @@
+                 Image {
+                     mipmap: true
+                     id: albumArt
+-                    sourceSize: Qt.size(128, 128)
++                    sourceSize: Qt.size(lockPlayer.px(160), lockPlayer.px(160))
+                     anchors.fill: parent
+                     source: (MprisController.activePlayer?.trackArtUrl ?? "") !== "" ? MprisController.activePlayer.trackArtUrl : lockPlayer.wallpaperPath
+                     fillMode: Image.PreserveAspectCrop
+@@ -212,7 +224,7 @@
+                 text: lockPlayer.isPlaying ? Icons.pause : Icons.play
+                 textFormat: Text.RichText
+                 color: Styling.srItem("overprimary")
+-                font.pixelSize: 24
++                font.pixelSize: lockPlayer.px(24)
+                 font.family: Icons.font
+                 opacity: playPauseHover.hovered ? 1.0 : 0.0
+                 visible: MprisController.canTogglePlaying
+@@ -242,7 +254,7 @@
+         ColumnLayout {
+             Layout.fillWidth: true
+             Layout.fillHeight: true
+-            spacing: 4
++            spacing: lockPlayer.px(4)
+ 
+             // Título y artista
+             ColumnLayout {
+@@ -251,10 +263,10 @@
+ 
+                 Text {
+                     Layout.fillWidth: true
+-                    text: MprisController.activePlayer?.trackTitle ?? "No hay reproducción activa"
++                    text: MprisController.activePlayer?.trackTitle ?? "Track title"
+                     textFormat: Text.PlainText
+                     color: Colors.overBackground
+-                    font.pixelSize: Config.theme.fontSize
++                    font.pixelSize: lockPlayer.px(Config.theme.fontSize)
+                     font.weight: Font.Bold
+                     font.family: Config.theme.font
+                     elide: Text.ElideRight
+@@ -264,15 +276,15 @@
+ 
+                 Text {
+                     Layout.fillWidth: true
+-                    text: MprisController.activePlayer?.trackArtist ?? ""
++                    text: MprisController.activePlayer?.trackArtist ?? (lockPlayer.sample ? "Artist" : "")
+                     textFormat: Text.PlainText
+                     color: Colors.overBackground
+-                    font.pixelSize: Config.theme.fontSize
++                    font.pixelSize: lockPlayer.px(Config.theme.fontSize)
+                     font.family: Config.theme.font
+                     elide: Text.ElideRight
+                     wrapMode: Text.NoWrap
+                     maximumLineCount: 1
+-                    visible: text !== ""
++                    visible: !lockPlayer.compact && text !== ""
+                     opacity: 0.7
+                 }
+             }
+@@ -280,14 +292,14 @@
+             // Controles
+             RowLayout {
+                 Layout.fillWidth: true
+-                spacing: 8
++                spacing: lockPlayer.px(8)
+ 
+                 Text {
+                     id: previousBtn
+                     text: Icons.previous
+                     textFormat: Text.RichText
+                     color: previousHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
+-                    font.pixelSize: 20
++                    font.pixelSize: lockPlayer.px(20)
+                     font.family: Icons.font
+                     opacity: MprisController.canGoPrevious ? 1.0 : 0.3
+ 
+@@ -314,7 +326,7 @@
+                 PositionSlider {
+                     id: positionSlider
+                     Layout.fillWidth: true
+-                    Layout.preferredHeight: 4
++                    Layout.preferredHeight: lockPlayer.px(4)
+ 
+                     player: MprisController.activePlayer
+                     useCustomColors: true
+@@ -327,7 +339,7 @@
+                     text: Icons.next
+                     textFormat: Text.RichText
+                     color: nextHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
+-                    font.pixelSize: 20
++                    font.pixelSize: lockPlayer.px(20)
+                     font.family: Icons.font
+                     opacity: MprisController.canGoNext ? 1.0 : 0.3
+ 
+@@ -353,6 +365,7 @@
+ 
+                 Text {
+                     id: modeBtn
++                    visible: !lockPlayer.compact
+                     text: {
+                         if (MprisController.hasShuffle)
+                             return Icons.shuffle;
+@@ -367,7 +380,7 @@
+                     }
+                     textFormat: Text.RichText
+                     color: modeHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
+-                    font.pixelSize: 20
++                    font.pixelSize: lockPlayer.px(20)
+                     font.family: Icons.font
+                     opacity: {
+                         if (!(MprisController.shuffleSupported || MprisController.loopSupported))
+@@ -429,7 +442,7 @@
+                     }
+                     textFormat: Text.RichText
+                     color: playerIconHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
+-                    font.pixelSize: 20
++                    font.pixelSize: lockPlayer.px(20)
+                     font.family: Icons.font
+                     opacity: MprisController.activePlayer ? 1.0 : 0.3
+ 
