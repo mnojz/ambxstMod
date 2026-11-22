@@ -27,6 +27,7 @@ Item {
     signal rejectionFinished()
     signal dismiss()
     signal layoutEdited(var values)
+    signal toolsRequested(string key, rect bounds)
 
     function focusPassword() {
         passwordContainer.focusPassword();
@@ -253,6 +254,7 @@ Item {
         x: bounds.x
         y: bounds.y
         visible: root.settings.mediaVisible || root.editing
+        opacity: root.settings.mediaVisible ? 1 : 0.35
 
 
         LockscreenMedia {
@@ -410,7 +412,9 @@ Item {
                     title: modelData.title
                     selected: root.selectedWidget === modelData.key
                     z: selected ? 1 : 0
+                    toolsAvailable: !modelData.key.startsWith("shortcut:")
                     onSelect: root.selectedWidget = modelData.key
+                    onToolsRequested: root.toolsRequested(modelData.key, Qt.rect(x, y, width, height))
                     onMovingChanged: {
                         if (moving)
                             root.activeEditHandle = handle;

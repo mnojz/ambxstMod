@@ -19,12 +19,19 @@ import "../../../../modules/lockscreen/LockscreenActions.js" as Actions
 Control {
     id: root
 
-    property int maxContentWidth: 760
+    property string editorWidget: ""
+    property var editorSettings
+    signal editorValuesChanged(var values)
+
+    property int maxContentWidth: 680
+    readonly property int minimumPanelWidth: 340
     property var draftStore: null
     property var localDraft: ({})
     readonly property var changes: draftStore ? draftStore.lockscreenDraft : localDraft
     readonly property bool dirty: Object.keys(changes).length > 0
     readonly property var settings: {
+        if (editorWidget && editorSettings)
+            return editorSettings;
         const settings = {};
         for (const key of Object.keys(Defaults.data))
             settings[key] = changes[key] ?? Config.customLockscreen[key];
@@ -82,6 +89,10 @@ Control {
     }
 
     function edit(values) {
+        if (editorWidget) {
+            editorValuesChanged(values);
+            return;
+        }
         const next = Object.assign({}, changes);
         for (const key of Object.keys(values)) {
             const value = values[key];
@@ -109,7 +120,16 @@ Control {
     }
 
     function applyPreset(preset) {
-        edit(preset.values);
+        if (!editorWidget) {
+            edit(preset.values);
+            return;
+        }
+        const values = Object.assign({}, preset.values);
+        delete values[editorWidget + "Position"];
+        delete values[editorWidget + "X"];
+        delete values[editorWidget + "Y"];
+        delete values[editorWidget === "clock" ? "clockSize" : editorWidget + "Scale"];
+        edit(values);
     }
 
     function path(url) {
@@ -171,6 +191,8 @@ Control {
     font.pixelSize: Styling.fontSize(0)
 
     Component.onCompleted: {
+        if (editorWidget)
+            return;
         scanRequest.restart();
         posterRequest.restart();
     }
@@ -183,7 +205,7 @@ Control {
     }
 
     function scanIfNeeded() {
-        if (libraryProcess.command.length === 0 || scannedDesktopPath !== desktopWallpaperPath)
+        if (!editorWidget && (libraryProcess.command.length === 0 || scannedDesktopPath !== desktopWallpaperPath))
             scan([]);
     }
 
@@ -228,7 +250,7 @@ Control {
 
     function requestVideoPoster() {
         const source = root.selectedVideo;
-        if (!posterProcess || posterProcess.running || !source || source === root.requestedPoster)
+        if (editorWidget || !posterProcess || posterProcess.running || !source || source === root.requestedPoster)
             return;
         root.requestedPoster = source;
         posterProcess.command = ["python3", root.path(root.helper), "--preview-url", source,
@@ -486,7 +508,7 @@ Control {
         required property var options
 
         FlatCombo {
-            Layout.preferredWidth: Math.min(210, viewport.width * 0.36)
+            Layout.preferredWidth: Math.min(138, viewport.width * 0.3)
             model: choice.options.map(option => option[0])
             currentIndex: Math.max(0, choice.options.findIndex(option => option[1] === root.settings[choice.setting]))
             Accessible.name: choice.label
@@ -494,22 +516,224 @@ Control {
         }
     }
 
-    component PresetGrid: RowLayout {
+    component FontPicker: FlatCombo {
+        id: fontPicker
+        property var families: []
+        readonly property var matchingFamilies: [...new Set(["", root.settings.clockFont, ...families])]
+            .filter(family => (family || "Shell font").toLowerCase().includes((fontSearch?.text || "").trim().toLowerCase()))
+
+        model: matchingFamilies.map(family => family || "Shell font")
+        currentIndex: matchingFamilies.indexOf(root.settings.clockFont)
+        displayText: root.settings.clockFont || "Shell font"
+        Accessible.name: "Clock font family"
+        onActivated: index => root.setSetting("clockFont", matchingFamilies[index])
+
+        delegate: Basic.ItemDelegate {
+            id: fontOption
+            required property int index
+            width: ListView.view.width
+            implicitHeight: 31
+            highlighted: fontPicker.highlightedIndex === index
+            hoverEnabled: true
+
+            contentItem: Text {
+                text: fontPicker.textAt(fontOption.index)
+                font.family: fontPicker.matchingFamilies[fontOption.index] || Config.theme.font
+                font.pixelSize: Styling.fontSize(0)
+                color: fontOption.highlighted || fontOption.hovered ? Colors.overPrimary : Colors.overSurface
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+            background: Rectangle {
+                radius: 5
+                color: fontOption.highlighted || fontOption.hovered ? Colors.primary : "transparent"
+            }
+        }
+
+        popup: Basic.Popup {
+            y: fontPicker.height + 3
+            width: Math.min(Math.max(fontPicker.width, 235), viewport.width - 12)
+            x: fontPicker.width - width
+            padding: 6
+            margins: 5
+            implicitHeight: fontPopupContents.implicitHeight + topPadding + bottomPadding
+            onAboutToShow: {
+                if (!fontPicker.families.length)
+                    fontPicker.families = Qt.fontFamilies().slice().sort((a, b) => a.localeCompare(b));
+            }
+            onOpened: fontSearch.forceActiveFocus()
+            onClosed: fontSearch.clear()
+
+            contentItem: ColumnLayout {
+                id: fontPopupContents
+                spacing: 5
+
+                Basic.TextField {
+                    id: fontSearch
+                    Layout.fillWidth: true
+                    placeholderText: "Search fonts"
+                    color: Colors.overSurface
+                    placeholderTextColor: Colors.overSurfaceVariant
+                    selectByMouse: true
+                    background: Rectangle {
+                        radius: 5
+                        color: Colors.surfaceContainer
+                    }
+                }
+
+                Label {
+                    visible: fontPicker.matchingFamilies.length === 0
+                    text: "No matching fonts"
+                    color: Colors.overSurfaceVariant
+                    Layout.fillWidth: true
+                }
+
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(contentHeight, 230)
+                    clip: true
+                    model: fontPicker.popup.visible ? fontPicker.delegateModel : null
+                    currentIndex: fontPicker.highlightedIndex
+                    ScrollBar.vertical: ScrollBar {}
+                }
+            }
+
+            background: Rectangle {
+                radius: 8
+                color: Colors.surfaceContainerHigh
+                border.color: Colors.outlineVariant
+            }
+        }
+    }
+
+    component ClockGroup: Rectangle {
+        default property alias controls: groupControls.data
+        Layout.fillWidth: true
+        implicitWidth: groupControls.implicitWidth + 16
+        implicitHeight: groupControls.implicitHeight + 12
+        radius: 8
+        color: Colors.surfaceContainer
+
+        ColumnLayout {
+            id: groupControls
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            anchors.topMargin: 6
+            anchors.bottomMargin: 6
+            spacing: 3
+        }
+    }
+
+    component ThemeSwitch: Basic.Switch {
+        id: toggle
+        implicitWidth: 40
+        implicitHeight: 26
+        padding: 0
+
+        indicator: Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 38
+            height: 20
+            radius: height / 2
+            color: toggle.checked ? Colors.primary : Colors.surfaceContainerHighest
+            border.color: toggle.visualFocus ? Colors.outline : "transparent"
+
+            Rectangle {
+                x: toggle.checked ? parent.width - width - 3 : 3
+                anchors.verticalCenter: parent.verticalCenter
+                width: 14
+                height: width
+                radius: width / 2
+                color: toggle.checked ? Colors.overPrimary : Colors.outline
+            }
+        }
+    }
+
+    component ClockToggle: SettingRow {
+        id: option
+        required property string key
+        property bool value: Boolean(root.settings[key])
+        property var update: checked => root.setSetting(key, checked)
+        ThemeSwitch {
+            checked: option.value
+            Accessible.name: option.label
+            onToggled: option.update(checked)
+        }
+    }
+
+    component ClockSlider: SettingRow {
+        id: row
+        required property string key
+        required property int minimum
+        required property int maximum
+        property string unit: "%"
+        property real displayValue: root.settings[key]
+        Basic.Slider {
+            id: slider
+            Layout.fillWidth: true
+            Layout.minimumWidth: 45
+            implicitHeight: 24
+            from: row.minimum
+            to: row.maximum
+            stepSize: 1
+            snapMode: Slider.SnapAlways
+            value: row.displayValue
+            Accessible.name: row.label
+            onMoved: root.setSetting(row.key, Math.round(value))
+
+            background: Rectangle {
+                x: slider.leftPadding
+                y: (slider.height - height) / 2
+                width: slider.availableWidth
+                height: 4
+                radius: 2
+                color: Colors.outlineVariant
+
+                Rectangle {
+                    width: slider.visualPosition * parent.width
+                    height: parent.height
+                    radius: 2
+                    color: Colors.primary
+                }
+            }
+
+            handle: Rectangle {
+                x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
+                y: (slider.height - height) / 2
+                width: 13
+                height: width
+                radius: width / 2
+                color: slider.pressed ? Colors.primary : Colors.primaryFixed
+                border.color: slider.visualFocus ? Colors.overSurface : "transparent"
+            }
+        }
+        Label {
+            text: row.unit === "em" ? (slider.value / 100).toFixed(2) + " em"
+                : Math.round(slider.value) + "%"
+            color: Colors.overSurface
+        }
+    }
+
+    component PresetGrid: GridLayout {
         id: grid
         required property string kind
         required property var options
         Layout.fillWidth: true
-        spacing: 8
+        columns: 2
+        columnSpacing: 8
+        rowSpacing: 8
 
         Repeater {
-            model: grid.options
+            model: !root.editorWidget || root.editorWidget === grid.kind ? grid.options : []
 
             delegate: Button {
                 id: preset
                 required property var modelData
                 Layout.fillWidth: true
                 Layout.preferredWidth: 100
-                implicitHeight: 106
+                Layout.minimumWidth: 72
+                implicitHeight: grid.kind === "clock" ? 114 : 106
                 Accessible.name: modelData.name
                 readonly property var designKeys: grid.kind === "clock" ? ["clockStyle"]
                     : grid.kind === "media" ? ["mediaStyle", "mediaArtwork"] : ["loginStyle"]
@@ -524,6 +748,25 @@ Control {
                     antialiasing: true
                     color: preset.hovered || preset.activeFocus ? Colors.surfaceContainerHighest : Colors.surfaceContainer
                     border.color: preset.selected || preset.activeFocus ? Colors.primary : Colors.outlineVariant
+                    border.width: preset.selected && grid.kind === "clock" ? 2 : 1
+
+                    Rectangle {
+                        visible: preset.selected && grid.kind === "clock"
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: 8
+                        width: 18
+                        height: width
+                        radius: width / 2
+                        color: Colors.primary
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "✓"
+                            color: Colors.overPrimary
+                            font.bold: true
+                        }
+                    }
                 }
 
                 contentItem: ColumnLayout {
@@ -544,7 +787,10 @@ Control {
                             Item {
                                 LockscreenClock {
                                     anchors.centerIn: parent
-                                    settings: sample.settings
+                                    settings: Object.assign({}, sample.settings, {
+                                        clockSeconds: false, clockGreeting: false, clockFormat: "24h",
+                                        clockDateRatio: Math.max(23, sample.settings.clockDateRatio)
+                                    })
                                     live: false
                                     shadows: false
                                     scale: Math.min(parent.width / Math.max(1, width),
@@ -561,7 +807,8 @@ Control {
                                     anchors.centerIn: parent
                                     settings: sample.settings
                                     sample: true
-                                    renderScale: Math.max(0.01, Math.min(parent.width / 450, parent.height / 125) * sample.settings.mediaScale / 100)
+                                    renderScale: Math.max(0.01, Math.min(parent.width / (designWidth * 1.17),
+                                                    parent.height / (designHeight * 1.25)) * Math.min(1.25, sample.settings.mediaScale / 100))
                                 }
                             }
                         }
@@ -588,6 +835,7 @@ Control {
                         text: preset.modelData.name
                         color: preset.selected ? Colors.primary : Colors.overSurface
                         elide: Text.ElideRight
+                        bottomPadding: grid.kind === "clock" ? 3 : 0
                     }
                 }
 
@@ -595,6 +843,8 @@ Control {
             }
         }
     }
+
+    onEditorWidgetChanged: if (viewport) viewport.contentY = 0
 
     contentItem: Flickable {
         id: viewport
@@ -608,12 +858,13 @@ Control {
             id: page
             x: (viewport.width - width) / 2
             y: 4
-            width: Math.max(0, Math.min(viewport.width - 24, root.maxContentWidth))
+            width: Math.max(0, Math.min(viewport.width - (viewport.width < root.minimumPanelWidth + 24 ? 12 : 24), root.maxContentWidth))
             height: implicitHeight
             spacing: 14
 
             Section {
                 title: "Lock screen"
+                visible: !root.editorWidget
                 framed: false
 
                 Button {
@@ -634,20 +885,24 @@ Control {
                         border.color: Colors.primary
                         contentUnderBorder: true
 
-                        LockscreenScene {
-                            id: miniatureScene
-                            screen: root.targetScreen
-                            settings: root.settings
-                            videoPoster: root.videoPoster
+                        Loader {
+                            id: miniature
                             anchors.fill: parent
-                            designScale: width / previewCard.screenWidth
-                            preview: true
-                            miniature: true
+                            active: !root.editorWidget
+                            sourceComponent: LockscreenScene {
+                                screen: root.targetScreen
+                                settings: root.settings
+                                videoPoster: root.videoPoster
+                                anchors.fill: parent
+                                designScale: width / previewCard.screenWidth
+                                preview: true
+                                miniature: true
+                            }
                         }
 
                         Label {
                             anchors.centerIn: parent
-                            visible: miniatureScene.waitingForVideo
+                            visible: miniature.item?.waitingForVideo ?? false
                             text: "Loading video…"
                             color: Colors.overSurface
                             padding: 8
@@ -684,6 +939,7 @@ Control {
 
             Section {
                 title: "Wallpaper"
+                visible: !root.editorWidget
                 headerAction: Component {
                     ActionButton {
                         bare: true
@@ -697,13 +953,12 @@ Control {
                     }
                 }
 
-                RowLayout {
+                Flow {
                     Layout.fillWidth: true
                     spacing: 6
 
                     FlatCombo {
-                        Layout.preferredWidth: 111
-                        Layout.minimumWidth: 83
+                        width: 111
                         model: root.wallpaperModes.map(option => option[0])
                         currentIndex: root.wallpaperModes.findIndex(option => option[1] === root.mode)
                         Accessible.name: "Wallpaper type"
@@ -726,8 +981,6 @@ Control {
                         enabled: !libraryProcess.running && root.libraryError === ""
                         onClicked: Qt.openUrlExternally(Placement.fileUrl(root.galleryFolder))
                     }
-
-                    Item { Layout.fillWidth: true }
 
                     ActionButton {
                         label: "Use desktop"
@@ -881,77 +1134,169 @@ Control {
             }
 
             Section {
+                id: clockSection
                 title: "Clock"
+                visible: !root.editorWidget || root.editorWidget === "clock"
 
                 PresetGrid {
                     kind: "clock"
                     options: [
-                        { name: "Ambxst", values: { clockStyle: "offset", clockFont: "League Gothic", clockSize: 240, clockDate: false, clockBold: false, clockPosition: "center-center", clockX: -1, clockY: -1 } },
-                        { name: "Glance", values: { clockStyle: "inline", clockFont: "", clockSize: 115, clockDate: true, clockBold: true, clockPosition: "top-center", clockX: -1, clockY: -1 } },
-                        { name: "Stacked", values: { clockStyle: "stacked", clockFont: "", clockSize: 152, clockDate: true, clockBold: true, clockPosition: "center-left", clockX: -1, clockY: -1 } }
+                        { name: "Glance", values: { clockStyle: "inline", clockFont: "", clockSize: 112, clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 21, clockWeight: "light", clockLetterSpacing: 4, clockPosition: "top-center", clockX: -1, clockY: -1 } },
+                        { name: "Ambxst", values: { clockStyle: "offset", clockFont: "League Gothic", clockSize: 240, clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 15, clockWeight: "regular", clockLetterSpacing: 0, clockPosition: "center-center", clockX: -1, clockY: -1 } },
+                        { name: "Stacked", values: { clockStyle: "stacked", clockFont: "", clockSize: 152, clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 24, clockWeight: "semibold", clockLetterSpacing: 0, clockPosition: "center-left", clockX: -1, clockY: -1 } },
+                        { name: "Orbit", values: { clockStyle: "orbit", clockSize: 240, clockDate: false, clockWeekday: "hide", clockTimeRatio: 100, clockDateRatio: 10, clockWeight: "regular", clockLetterSpacing: 0, clockPosition: "center-center", clockX: -1, clockY: -1 } }
                     ]
                 }
 
-                Choice {
-                    label: "Time format"
-                    setting: "clockFormat"
-                    options: [["Follow shell", "shell"], ["12 hour", "12h"], ["24 hour", "24h"]]
+                Label {
+                    text: "Content"
+                    color: Colors.overSurfaceVariant
+                    font.bold: true
+                    font.letterSpacing: 1
                 }
 
-                SettingRow {
-                    label: "Font family"
-                    FlatCombo {
-                        id: fontPicker
-                        Layout.preferredWidth: Math.min(210, viewport.width * 0.36)
-                        property var installed: []
-                        readonly property var families: [...new Set(["", root.settings.clockFont, ...installed])]
-                        model: families.map(family => family || "Shell font")
-                        currentIndex: Math.max(0, families.indexOf(root.settings.clockFont))
-                        Accessible.name: "Clock font family"
-                        onActivated: index => root.setSetting("clockFont", families[index])
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: clockSection.width >= 395 ? 2 : 1
+                    columnSpacing: 12
+                    rowSpacing: 4
 
-                        Connections {
-                            target: fontPicker.popup
-                            function onAboutToShow() {
-                                if (fontPicker.installed.length === 0)
-                                    fontPicker.installed = Qt.fontFamilies().slice().sort((a, b) => a.localeCompare(b));
+                    ClockGroup {
+                        ClockToggle { label: "Show date"; key: "clockDate" }
+                        ClockToggle {
+                            label: "Show weekday"
+                            key: "clockWeekday"
+                            value: root.settings.clockWeekday === "show"
+                                || (root.settings.clockWeekday !== "hide" && root.settings.clockDate)
+                            update: checked => root.setSetting(key, checked ? "show" : "hide")
+                        }
+                    }
+
+                    ClockGroup {
+                        ClockToggle { label: "Show seconds"; key: "clockSeconds" }
+                        ClockToggle { label: "Show greeting"; key: "clockGreeting" }
+                    }
+                }
+
+                Label {
+                    text: "Time & Typography"
+                    color: Colors.overSurfaceVariant
+                    font.bold: true
+                    font.letterSpacing: 1
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: clockSection.width >= 510 ? 2 : 1
+                    columnSpacing: 12
+                    rowSpacing: 6
+
+                    ClockGroup {
+                        SettingRow {
+                            label: "Time format"
+
+                            RowLayout {
+                                id: formatOptions
+                                spacing: 3
+                                readonly property bool twelveHour: root.settings.clockFormat === "12h"
+                                    || (root.settings.clockFormat === "shell" && Config.bar.use12hFormat)
+
+                                Repeater {
+                                    model: [{ label: "12h", value: "12h" }, { label: "24h", value: "24h" }]
+                                    delegate: ActionButton {
+                                        required property var modelData
+                                        label: modelData.label
+                                        horizontalPadding: 6
+                                        accent: formatOptions.twelveHour === (modelData.value === "12h")
+                                        Accessible.name: modelData.value === "12h" ? "12-hour format" : "24-hour format"
+                                        Accessible.checkable: true
+                                        Accessible.checked: accent
+                                        onClicked: root.setSetting("clockFormat", modelData.value)
+                                    }
+                                }
+
+                                ActionButton {
+                                    label: "AM/PM"
+                                    horizontalPadding: 6
+                                    enabled: formatOptions.twelveHour
+                                    accent: enabled && root.settings.clockAmPm
+                                    Accessible.name: "Show AM or PM"
+                                    Accessible.checkable: true
+                                    Accessible.checked: accent
+                                    onClicked: root.setSetting("clockAmPm", !root.settings.clockAmPm)
+                                }
                             }
                         }
+
+                        SettingRow {
+                            label: "Font family"
+                            FontPicker {
+                                Layout.preferredWidth: Math.min(155, viewport.width * 0.36)
+                            }
+                        }
+
+                        Choice {
+                            label: "Font weight"
+                            setting: "clockWeight"
+                            options: [["Preset default", "legacy"], ["Light", "light"], ["Regular", "regular"],
+                                      ["Medium", "medium"], ["Semibold", "semibold"], ["Bold", "bold"], ["Black", "black"]]
+                        }
+                    }
+
+                    ClockGroup {
+                        ClockSlider { label: "Time proportion"; key: "clockTimeRatio"; minimum: 65; maximum: 140 }
+                        ClockSlider {
+                            label: "Date proportion"
+                            key: "clockDateRatio"
+                            minimum: 5
+                            maximum: 65
+                            displayValue: root.settings.clockDateRatio || (root.settings.clockDateSize > 0
+                                ? root.settings.clockDateSize * 100 / Math.max(1, root.settings.clockSize) : 19)
+                        }
+                        ClockSlider { label: "Letter spacing"; key: "clockLetterSpacing"; minimum: -10; maximum: 25; unit: "em" }
                     }
                 }
             }
 
             Section {
                 title: "Media player"
+                visible: !root.editorWidget || root.editorWidget === "media"
+                headerAction: Component {
+                    ThemeSwitch {
+                        checked: root.settings.mediaVisible
+                        onToggled: root.setSetting("mediaVisible", checked)
+                        Accessible.name: "Show media player"
+                        ToolTip.visible: hovered
+                        ToolTip.text: checked ? "Hide media player" : "Show media player"
+                    }
+                }
 
                 PresetGrid {
                     kind: "media"
                     options: [
-                        { name: "Ambxst", values: { mediaStyle: "bg", mediaArtwork: true, mediaScale: 100, mediaPosition: "legacy", mediaVisible: true, mediaX: -1, mediaY: -1 } },
-                        { name: "Compact", values: { mediaStyle: "compact", mediaArtwork: false, mediaScale: 75, mediaPosition: "bottom-left", mediaVisible: true, mediaX: -1, mediaY: -1 } },
-                        { name: "Now playing", values: { mediaStyle: "pane", mediaArtwork: true, mediaScale: 125, mediaPosition: "bottom-right", mediaVisible: true, mediaX: -1, mediaY: -1 } }
+                        { name: "Ambxst", values: { mediaStyle: "bg", mediaArtwork: true, mediaScale: 100, mediaPosition: "legacy", mediaX: -1, mediaY: -1 } },
+                        { name: "Compact", values: { mediaStyle: "compact", mediaArtwork: false, mediaScale: 75, mediaPosition: "bottom-left", mediaX: -1, mediaY: -1 } },
+                        { name: "Now playing", values: { mediaStyle: "pane", mediaArtwork: true, mediaScale: 125, mediaPosition: "bottom-right", mediaX: -1, mediaY: -1 } },
+                        { name: "Cover", values: { mediaStyle: "cover", mediaArtwork: false, mediaScale: 100, mediaPosition: "bottom-left", mediaX: -1, mediaY: -1 } },
+                        { name: "Ribbon", values: { mediaStyle: "ribbon", mediaArtwork: false, mediaScale: 100, mediaPosition: "bottom-left", mediaX: -1, mediaY: -1 } },
+                        { name: "Outline", values: { mediaStyle: "outline", mediaArtwork: false, mediaScale: 100, mediaPosition: "bottom-right", mediaX: -1, mediaY: -1 } }
                     ]
-                }
-
-                SettingRow {
-                    label: "Show media player"
-                    Switch {
-                        checked: root.settings.mediaVisible
-                        onToggled: root.setSetting("mediaVisible", checked)
-                        Accessible.name: "Show media player"
-                    }
                 }
             }
 
             Section {
                 title: "Login"
+                visible: !root.editorWidget || root.editorWidget === "login"
 
                 PresetGrid {
                     kind: "login"
                     options: [
                         { name: "Ambxst", values: { loginStyle: "bg", loginAvatar: true, loginScale: 100, loginPosition: "legacy", loginX: -1, loginY: -1 } },
                         { name: "Minimal", values: { loginStyle: "plain", loginAvatar: false, loginScale: 90, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
-                        { name: "Profile", values: { loginStyle: "pane", loginAvatar: true, loginScale: 130, loginPosition: "bottom-center", loginX: -1, loginY: -1 } }
+                        { name: "Profile", values: { loginStyle: "pane", loginAvatar: true, loginScale: 130, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
+                        { name: "Badge", values: { loginStyle: "badge", loginAvatar: true, loginScale: 100, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
+                        { name: "Underline", values: { loginStyle: "line", loginAvatar: false, loginScale: 100, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
+                        { name: "Sign-in card", values: { loginStyle: "card", loginAvatar: false, loginScale: 100, loginPosition: "bottom-center", loginX: -1, loginY: -1 } }
                     ]
                 }
 
@@ -967,6 +1312,7 @@ Control {
             Section {
                 id: shortcutsSection
                 title: "Shortcuts"
+                visible: !root.editorWidget
                 readonly property var configured: Array.from(root.settings.shortcuts ?? [])
                 readonly property bool hasSelection: Actions.available.some(action => isSelected(action.id))
 
@@ -1019,7 +1365,7 @@ Control {
         radius: 8
         color: Colors.surfaceContainerHighest
         border.color: Colors.outlineVariant
-        visible: root.dirty
+        visible: !root.editorWidget && root.dirty
         z: 2
 
         RowLayout {

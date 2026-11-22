@@ -28,9 +28,12 @@ Item {
     readonly property real designWidth: 350
     width: designWidth * renderScale
     readonly property bool profileLayout: settings.loginStyle === "pane"
+    readonly property bool titleCard: settings.loginStyle === "card"
+    readonly property bool lineLayout: settings.loginStyle === "line"
+    readonly property bool badgeLayout: settings.loginStyle === "badge"
     readonly property bool portraitAbove: profileLayout && settings.loginAvatar
-    readonly property bool minimalBackground: profileLayout || settings.loginStyle === "plain"
-    readonly property real designHeight: portraitAbove ? 188 : settings.loginAvatar ? 96 : 72
+    readonly property bool minimalBackground: profileLayout || lineLayout || settings.loginStyle === "plain"
+    readonly property real designHeight: portraitAbove ? 188 : titleCard ? 112 : lineLayout ? (settings.loginAvatar ? 80 : 62) : settings.loginAvatar ? 96 : 72
     height: designHeight * renderScale
 
     function focusPassword() {
@@ -58,8 +61,9 @@ Item {
         StyledRect {
             anchors.fill: parent
             visible: !login.minimalBackground
-            variant: "bg"
-            radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+            variant: login.titleCard ? "pane" : "bg"
+            antialiasing: true
+            radius: login.titleCard || login.badgeLayout ? login.px(14) : Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
         }
 
         Item {
@@ -71,20 +75,23 @@ Item {
                 visible: login.settings.loginAvatar
                 width: login.px(login.portraitAbove ? 112 : 64)
                 height: width
-                x: login.portraitAbove ? (parent.width - width) / 2 : 0
-                y: login.portraitAbove ? login.px(4) : (parent.height - height) / 2
+                x: login.portraitAbove ? (parent.width - width) / 2 : login.badgeLayout ? parent.width - width : 0
+                y: login.portraitAbove ? login.px(4) : login.titleCard ? login.px(43) : (parent.height - height) / 2
                 radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
                 color: "transparent"
                 clip: true
                 antialiasing: true
 
                 Image {
-                    mipmap: true
                     id: userAvatar
+                    mipmap: true
                     anchors.fill: parent
+                    readonly property int targetPixels: 32 * Math.max(1, Math.ceil(width * (Screen.devicePixelRatio || 1) * 1.25 / 32))
+                    sourceSize: Qt.size(targetPixels, targetPixels)
                     source: login.settings.loginAvatar ? `file://${Quickshell.env("HOME")}/.face.icon` : ""
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
+                    retainWhileLoading: true
                     asynchronous: true
                     visible: status === Image.Ready
                 }
@@ -93,6 +100,7 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     text: Icons.user
+                    renderType: Text.CurveRendering
                     font.family: Icons.font
                     font.pixelSize: login.px(login.portraitAbove ? 48 : 32)
                     color: Colors.overSurface
@@ -100,15 +108,41 @@ Item {
                 }
             }
 
+            Text {
+                visible: login.titleCard
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: login.px(11)
+                text: "Sign in"
+                font.family: Config.theme.font
+                font.pixelSize: login.px(21)
+                font.weight: Font.DemiBold
+                color: Colors.primaryFixed
+                renderType: Text.CurveRendering
+            }
+
             // Password field
             StyledRect {
                 id: passwordFieldBg
-                width: parent.width - x
-                height: login.px(48)
-                x: !login.portraitAbove && login.settings.loginAvatar ? avatarContainer.width + login.px(12) : 0
-                y: login.portraitAbove ? avatarContainer.y + avatarContainer.height + login.px(16) : (parent.height - height) / 2
+                readonly property bool avatarInRow: login.settings.loginAvatar && !login.portraitAbove
+                width: parent.width - (avatarInRow ? avatarContainer.width + login.px(12) : 0)
+                height: login.px(login.lineLayout ? 42 : 48)
+                x: avatarInRow && !login.badgeLayout ? avatarContainer.width + login.px(12) : 0
+                y: login.portraitAbove ? avatarContainer.y + avatarContainer.height + login.px(16)
+                    : login.titleCard ? login.px(49) : (parent.height - height) / 2
+                backgroundOpacity: login.lineLayout && !passwordInputBox.showError ? 0 : -1
+                enableBorder: !login.lineLayout
                 variant: passwordInputBox.showError ? "error" : "common"
                 radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+
+                Rectangle {
+                    visible: login.lineLayout
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: login.px(2)
+                    color: passwordInputBox.showError ? Colors.error : Colors.primary
+                    antialiasing: true
+                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -119,6 +153,8 @@ Item {
                     // User icon / Spinner
                     Text {
                         id: userIcon
+                        visible: !login.lineLayout || login.authenticating
+                        renderType: Text.CurveRendering
                         text: login.authenticating ? Icons.circleNotch : Icons.user
                         font.family: Icons.font
                         font.pixelSize: login.px(24)

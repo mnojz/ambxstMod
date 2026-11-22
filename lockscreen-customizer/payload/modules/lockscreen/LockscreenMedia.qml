@@ -10,7 +10,7 @@ Item {
     property bool sample: false
     property real renderScale: 1
 
-    readonly property real designWidth: 350
+    readonly property real designWidth: player.coverLayout ? 400 : player.ribbonLayout ? 370 : player.outlineLayout ? 330 : 350
     readonly property real designHeight: player.unscaledHeight
     width: designWidth * renderScale
     height: designHeight * renderScale
@@ -23,5 +23,6 @@ Item {
         artworkBackground: root.settings.mediaArtwork
         variant: root.settings.mediaStyle === "bg" ? "bg" : "pane"
         compact: root.settings.mediaStyle === "compact"
+        visualStyle: root.settings.mediaStyle
     }
 }

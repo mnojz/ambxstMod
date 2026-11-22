@@ -12,6 +12,8 @@ Item {
     required property var siblings
     property real guideX: -1
     property real guideY: -1
+    property bool toolsAvailable: false
+    signal toolsRequested()
     signal select()
     signal done(real x, real y, real width)
 
@@ -198,7 +200,9 @@ Item {
     Repeater {
         model: root.selected ? 8 : 0
         delegate: Item {
+            id: grip
             required property int index
+            readonly property bool hasTools: root.toolsAvailable && index === 3
             readonly property bool corner: index < 4
             readonly property bool horizontalEdge: index === 4 || index === 5
             readonly property bool verticalEdge: index === 6 || index === 7
@@ -207,10 +211,46 @@ Item {
             readonly property real centerY: corner ? (index < 2 ? 0 : root.height)
                 : horizontalEdge ? (index === 4 ? -6 : root.height + 6) : root.height / 2
 
-            width: corner ? 36 : horizontalEdge ? Math.min(45, root.width / 3) : 20
+            width: hasTools ? Math.max(36, toolsLabel.implicitWidth + 18) : corner ? 36 : horizontalEdge ? Math.min(45, root.width / 3) : 20
             height: corner ? 36 : verticalEdge ? Math.min(45, root.height / 3) : 20
-            x: centerX - width / 2
+            x: hasTools ? centerX - width + 8 : centerX - width / 2
             y: centerY - height / 2
+
+            activeFocusOnTab: hasTools
+            Accessible.role: Accessible.Button
+            Accessible.ignored: !hasTools
+            Accessible.name: "Tools for " + root.title
+            Accessible.onPressAction: if (hasTools) root.toolsRequested()
+            Keys.onReturnPressed: if (hasTools) root.toolsRequested()
+            Keys.onSpacePressed: if (hasTools) root.toolsRequested()
+
+            Rectangle {
+                visible: grip.hasTools
+                width: grip.width
+                height: toolsLabel.implicitHeight + 8
+                anchors.verticalCenter: parent.verticalCenter
+                radius: 6
+                color: toolHover.hovered || grip.activeFocus ? Colors.primary : Colors.surfaceContainerHighest
+                border.color: Colors.primary
+
+                Text {
+                    id: toolsLabel
+                    anchors.centerIn: parent
+                    text: "Tools"
+                    color: toolHover.hovered || grip.activeFocus ? Colors.overPrimary : Colors.overSurface
+                }
+
+                HoverHandler {
+                    id: toolHover
+                    enabled: grip.hasTools
+                }
+
+                TapHandler {
+                    enabled: grip.hasTools
+                    gesturePolicy: TapHandler.DragThreshold
+                    onTapped: root.toolsRequested()
+                }
+            }
 
             HoverHandler {
                 cursorShape: horizontalEdge ? Qt.SizeVerCursor : verticalEdge ? Qt.SizeHorCursor
