@@ -39,7 +39,7 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
              root.pauseAutoSave = true;
              reload();
              root.pauseAutoSave = false;
-@@ -947,12 +963,117 @@
+@@ -947,12 +963,116 @@
          onPathChanged: reload()
          onAdapterUpdated: {
              if (root.lockscreenReady && !root.pauseAutoSave) {
@@ -55,16 +55,15 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
 +            property list<var> wallpaperImages: []
 +            property string wallpaperVideo: ""
 +            property int wallpaperInterval: 30
-+            property int wallpaperDim: 25
 +            property int wallpaperBlur: 0
 +            property string clockStyle: "offset"
 +            property string clockFont: "League Gothic"
 +            property int clockSize: 240
 +            property string clockPosition: "center-center"
 +            property string clockFormat: "shell"
-+            property string clockColor: "theme"
 +            property string mediaPosition: "legacy"
 +            property int mediaScale: 100
++            property bool clockVisible: true
 +            property bool mediaVisible: true
 +            property bool mediaArtwork: true
 +            property string loginPosition: "legacy"
@@ -162,7 +161,7 @@ diff --git a/config/defaults/lockscreen.js b/config/defaults/lockscreen.js
 index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b7139891d66491 100644
 --- a/config/defaults/lockscreen.js
 +++ b/config/defaults/lockscreen.js
-@@ -1,5 +1,45 @@
+@@ -1,5 +1,44 @@
  .pragma library
  
  var data = {
@@ -173,16 +172,15 @@ index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b71398
 +    "wallpaperImages": [],
 +    "wallpaperVideo": "",
 +    "wallpaperInterval": 30,
-+    "wallpaperDim": 25,
 +    "wallpaperBlur": 0,
 +    "clockStyle": "offset",
 +    "clockFont": "League Gothic",
 +    "clockSize": 240,
 +    "clockPosition": "center-center",
 +    "clockFormat": "shell",
-+    "clockColor": "theme",
 +    "mediaPosition": "legacy",
 +    "mediaScale": 100,
++    "clockVisible": true,
 +    "mediaVisible": true,
 +    "mediaArtwork": true,
 +    "loginPosition": "legacy",

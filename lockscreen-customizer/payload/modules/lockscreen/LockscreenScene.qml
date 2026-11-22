@@ -22,12 +22,37 @@ Item {
     property Item activeEditHandle
     property var shortcutWidgets: ({})
     property bool editing: false
-    property string selectedWidget: "clock"
+    property string selectedWidget: settings.clockVisible ? "clock" : "login"
+    readonly property var widgetOptions: [
+        { key: "clock", title: "Clock" },
+        { key: "media", title: "Media player" },
+        { key: "login", title: "Login" },
+        ...Actions.available.map(action => ({ key: "shortcut:" + action.id, title: action.label }))
+    ]
     signal passwordSubmitted(string password)
     signal rejectionFinished()
     signal dismiss()
     signal layoutEdited(var values)
-    signal toolsRequested(string key, rect bounds)
+    signal toolsRequested(string key, Item handle)
+    signal contextMenuRequested(point position, string key)
+
+    function hasWidget(key) {
+        if (key === "login")
+            return true;
+        if (key.startsWith("shortcut:"))
+            return Boolean(shortcutFor(key.slice(9)));
+        return settings[key + "Visible"];
+    }
+
+    function setWidgetEnabled(key, enabled) {
+        if (key === "login" || hasWidget(key) === enabled)
+            return;
+        if (key.startsWith("shortcut:"))
+            layoutEdited({ shortcuts: Actions.setEnabled(Array.from(settings.shortcuts ?? []), key.slice(9), enabled) });
+        else
+            layoutEdited({ [key + "Visible"]: enabled });
+        selectedWidget = enabled ? key : "login";
+    }
 
     function focusPassword() {
         passwordContainer.focusPassword();
@@ -203,7 +228,7 @@ Item {
 
     // Soft drift correction against the background video
     Timer {
-        id: videoDriftTimer
+
         interval: 15000
         running: !root.miniature && wallpaperBackground.isVideo
         repeat: true
@@ -221,6 +246,7 @@ Item {
         id: clockContainer
         z: root.activeEditHandle?.widget === clockContainer ? 12 : 10
         settings: root.settings
+        visible: root.settings.clockVisible
         designScale: root.designScale
         shadows: !root.miniature && scale === 1
         readonly property real baseWidth: width
@@ -253,8 +279,7 @@ Item {
         readonly property rect bounds: root.visualBounds(playerContainer)
         x: bounds.x
         y: bounds.y
-        visible: root.settings.mediaVisible || root.editing
-        opacity: root.settings.mediaVisible ? 1 : 0.35
+        visible: root.settings.mediaVisible
 
 
         LockscreenMedia {
@@ -330,7 +355,7 @@ Item {
 
     // Screen corners
     RoundCorner {
-        id: topLeft
+
         visible: !root.miniature
         size: Styling.radius(4)
         anchors.left: parent.left
@@ -340,7 +365,7 @@ Item {
     }
 
     RoundCorner {
-        id: topRight
+
         visible: !root.miniature
         size: Styling.radius(4)
         anchors.right: parent.right
@@ -350,7 +375,7 @@ Item {
     }
 
     RoundCorner {
-        id: bottomLeft
+
         visible: !root.miniature
         size: Styling.radius(4)
         anchors.left: parent.left
@@ -360,7 +385,7 @@ Item {
     }
 
     RoundCorner {
-        id: bottomRight
+
         visible: !root.miniature
         size: Styling.radius(4)
         anchors.right: parent.right
@@ -375,13 +400,28 @@ Item {
         z: 110
         sourceComponent: Item {
             id: editorLayer
-            readonly property var widgets: [
-                { key: "clock", title: "Clock", widget: clockContainer },
-                { key: "media", title: "Media player", widget: playerContainer },
-                { key: "login", title: "Login", widget: passwordContainer }
-            ].concat(Actions.available.filter(action => root.shortcutWidgets[action.id]).map(action => ({
-                key: "shortcut:" + action.id, title: action.label, widget: root.shortcutWidgets[action.id]
-            })))
+            readonly property var widgets: root.widgetOptions.map(option => {
+                const widget = option.key === "clock" ? clockContainer
+                    : option.key === "media" ? playerContainer
+                    : option.key === "login" ? passwordContainer : root.shortcutWidgets[option.key.slice(9)];
+                return { key: option.key, title: option.title, widget };
+            }).filter(entry => entry.widget)
+
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                onTapped: point => {
+                    const position = point.position;
+                    const hits = editorLayer.widgets.filter(entry => {
+                        if (!entry.widget.visible)
+                            return false;
+                        const bounds = root.visualBounds(entry.widget);
+                        return position.x >= bounds.x && position.x <= bounds.x + bounds.width
+                            && position.y >= bounds.y && position.y <= bounds.y + bounds.height;
+                    });
+                    const target = hits.find(entry => entry.key === root.selectedWidget) ?? hits[hits.length - 1];
+                    root.contextMenuRequested(position, target?.key ?? "");
+                }
+            }
 
             Rectangle {
                 x: Math.round(parent.width / 2)
@@ -406,15 +446,15 @@ Item {
                     id: handle
                     required property var modelData
                     widget: modelData.widget
-                    visible: !modelData.key.startsWith("shortcut:") || widget.visible
+                    visible: widget.visible
                     siblings: editorLayer.widgets.filter(entry => entry.key !== modelData.key
-                        && (!entry.key.startsWith("shortcut:") || entry.widget.visible)).map(entry => entry.widget)
+                        && entry.widget.visible).map(entry => entry.widget)
                     title: modelData.title
                     selected: root.selectedWidget === modelData.key
                     z: selected ? 1 : 0
                     toolsAvailable: !modelData.key.startsWith("shortcut:")
                     onSelect: root.selectedWidget = modelData.key
-                    onToolsRequested: root.toolsRequested(modelData.key, Qt.rect(x, y, width, height))
+                    onToolsRequested: root.toolsRequested(modelData.key, handle)
                     onMovingChanged: {
                         if (moving)
                             root.activeEditHandle = handle;

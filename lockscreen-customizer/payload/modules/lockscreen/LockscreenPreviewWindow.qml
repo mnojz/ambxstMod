@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Basic as Basic
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
@@ -19,6 +20,23 @@ PanelWindow {
     property bool closing: false
     property string inspectorWidget: ""
     property bool inspectorOnRight: false
+    property Item inspectorHandle
+
+    readonly property rect inspectedBounds: inspectorHandle
+        ? Qt.rect(inspectorHandle.x, inspectorHandle.y, inspectorHandle.width, inspectorHandle.height)
+        : Qt.rect(0, 0, 0, 0)
+
+    onInspectedBoundsChanged: {
+        if (inspectorHandle && overlapsInspector(inspectedBounds, inspectorOnRight)
+                && !overlapsInspector(inspectedBounds, !inspectorOnRight))
+            inspectorOnRight = !inspectorOnRight;
+    }
+
+    function overlapsInspector(bounds, right) {
+        const x = right ? slide.width - inspector.width - 12 : 12;
+        return bounds.x < x + inspector.width && bounds.x + bounds.width > x
+            && bounds.y < inspector.y + inspector.height && bounds.y + bounds.height > inspector.y;
+    }
     signal dismiss()
     signal layoutEdited(var values)
 
@@ -51,6 +69,7 @@ PanelWindow {
 
     function closeInspector() {
         inspectorWidget = "";
+        inspectorHandle = null;
         scene.forceActiveFocus();
     }
 
@@ -95,13 +114,23 @@ PanelWindow {
                     root.closeInspector();
             }
 
-            onToolsRequested: (key, bounds) => {
+            onToolsRequested: (key, handle) => {
                 if (root.inspectorWidget === key) {
                     root.closeInspector();
                 } else {
-                    root.inspectorOnRight = bounds.x + bounds.width / 2 < scene.width / 2;
+                    root.inspectorOnRight = handle.x + handle.width / 2 < scene.width / 2;
                     root.inspectorWidget = key;
+                    root.inspectorHandle = handle;
                     inspector.item?.forceActiveFocus();
+                }
+            }
+
+            onContextMenuRequested: (position, key) => {
+                if (!key) {
+                    addWidgetMenu.popup(position);
+                } else if (key !== "login") {
+                    removeWidgetMenu.widgetKey = key;
+                    removeWidgetMenu.popup(position);
                 }
             }
 
@@ -117,6 +146,137 @@ PanelWindow {
                     startSlide.start();
                 forceActiveFocus();
             }
+        }
+
+        component EditorMenu: Basic.Menu {
+            id: menu
+            readonly property bool pointerInside: menuHover.hovered
+
+            function containsPointer(item) {
+                if (!pointerInside)
+                    return false;
+                const position = item.mapFromItem(menu.contentItem, menuHover.point.position);
+                return item.contains(position);
+            }
+
+            popupType: Popup.Item
+            padding: 5
+            margins: 6
+            implicitWidth: 178
+
+            background: Rectangle {
+                radius: 9
+                color: Colors.surfaceContainerHigh
+                border.color: Colors.outlineVariant
+            }
+
+            contentItem: ListView {
+                implicitHeight: contentHeight
+                model: menu.contentModel
+                currentIndex: menu.currentIndex
+                interactive: contentHeight > height
+                clip: true
+
+                HoverHandler { id: menuHover }
+            }
+        }
+
+        component EditorMenuItem: Basic.MenuItem {
+            id: option
+            property bool destructive: false
+            property bool heading: false
+            readonly property bool pointerOver: !heading && (menu?.containsPointer(option) ?? false)
+            hoverEnabled: true
+            padding: 8
+            implicitHeight: 34
+
+            background: Rectangle {
+                radius: 5
+                color: option.pointerOver
+                    ? Qt.tint(Colors.surfaceContainerHigh, Qt.alpha(Colors.overSurface, option.enabled ? 0.13 : 0.08))
+                    : "transparent"
+                border.width: option.visualFocus && !option.menu?.pointerInside ? 1 : 0
+                border.color: Colors.outline
+            }
+
+            contentItem: Text {
+                text: option.text
+                font: option.font
+                verticalAlignment: Text.AlignVCenter
+                color: option.destructive ? Colors.red
+                    : option.enabled || option.heading ? Colors.overSurface : Colors.overSurfaceVariant
+                opacity: option.enabled || option.heading ? 1 : 0.65
+            }
+
+            HoverHandler {
+                enabled: option.enabled
+                cursorShape: Qt.PointingHandCursor
+            }
+        }
+
+        EditorMenu {
+            id: addWidgetMenu
+            title: "Add widget"
+
+            EditorMenuItem {
+                text: addWidgetMenu.title
+                heading: true
+                enabled: false
+            }
+
+            Instantiator {
+                model: root.editing ? scene.widgetOptions : []
+
+                delegate: EditorMenuItem {
+                    required property var modelData
+                    text: modelData.title
+                    enabled: !scene.hasWidget(modelData.key)
+                    onTriggered: scene.setWidgetEnabled(modelData.key, true)
+                }
+
+                onObjectAdded: (index, item) => addWidgetMenu.insertItem(index + 1, item)
+                onObjectRemoved: (index, item) => addWidgetMenu.removeItem(item)
+            }
+        }
+
+        EditorMenu {
+            id: removeWidgetMenu
+            property string widgetKey: ""
+
+            EditorMenuItem {
+                text: "Remove widget"
+                destructive: true
+                onTriggered: scene.setWidgetEnabled(removeWidgetMenu.widgetKey, false)
+            }
+        }
+
+        component EditorButton: Basic.Button {
+            id: action
+            property bool destructive: false
+            hoverEnabled: true
+            horizontalPadding: 12
+            verticalPadding: 7
+
+            background: Rectangle {
+                radius: 6
+                color: action.destructive
+                    ? (action.hovered || action.down ? Qt.tint(Colors.red, Qt.alpha(Colors.overRed, 0.12)) : Colors.red)
+                    : action.hovered || action.down
+                        ? Qt.tint(Colors.surfaceContainerHigh, Qt.alpha(Colors.overSurface, 0.13))
+                        : Colors.surfaceContainerHigh
+                border.color: Colors.outline
+                border.width: action.visualFocus || !action.destructive ? 1 : 0
+            }
+
+            contentItem: Text {
+                text: action.text
+                font: action.font
+                color: action.destructive ? Colors.overRed : Colors.overSurface
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
 
         Loader {
@@ -156,13 +316,12 @@ PanelWindow {
 
                         Label {
                             Layout.fillWidth: true
-                            text: "Widget tools"
+                            text: root.inspectorHandle?.title ?? "Widget tools"
                             font.bold: true
                             color: Colors.overSurface
                         }
 
-                        Button {
-                            flat: true
+                        EditorButton {
                             text: "Close"
                             focus: true
                             onClicked: root.closeInspector()
@@ -175,6 +334,15 @@ PanelWindow {
                         editorWidget: root.inspectorWidget
                         editorSettings: root.settings
                         onEditorValuesChanged: values => root.layoutEdited(values)
+                    }
+
+                    EditorButton {
+                        Layout.fillWidth: true
+                        Layout.margins: 6
+                        visible: root.inspectorWidget !== "login"
+                        destructive: true
+                        text: "Remove widget"
+                        onClicked: scene.setWidgetEnabled(root.inspectorWidget, false)
                     }
                 }
             }
@@ -197,12 +365,11 @@ PanelWindow {
                 spacing: 12
 
                 Label {
-                    text: root.editing ? "Drag a widget or resize it from an edge or corner" : "Lock screen preview · Esc to close"
+                    text: root.editing ? "Drag to move or resize · Right-click empty space to add a widget" : "Lock screen preview · Esc to close"
                     color: Colors.overSurface
                 }
 
-                Button {
-                    flat: true
+                EditorButton {
                     text: root.editing ? "Done" : "Close"
                     onClicked: root.closePreview()
                     Keys.onEscapePressed: root.closePreview()

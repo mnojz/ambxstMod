@@ -12,7 +12,7 @@ Item {
     required property var siblings
     property real guideX: -1
     property real guideY: -1
-    property bool toolsAvailable: false
+    property bool toolsAvailable: true
     signal toolsRequested()
     signal select()
     signal done(real x, real y, real width)
@@ -211,10 +211,10 @@ Item {
             readonly property real centerY: corner ? (index < 2 ? 0 : root.height)
                 : horizontalEdge ? (index === 4 ? -6 : root.height + 6) : root.height / 2
 
-            width: hasTools ? Math.max(36, toolsLabel.implicitWidth + 18) : corner ? 36 : horizontalEdge ? Math.min(45, root.width / 3) : 20
+            width: corner ? 36 : horizontalEdge ? Math.min(45, root.width / 3) : 20
             height: corner ? 36 : verticalEdge ? Math.min(45, root.height / 3) : 20
-            x: hasTools ? centerX - width + 8 : centerX - width / 2
-            y: centerY - height / 2
+            x: centerX - (hasTools ? width - 4 : width / 2)
+            y: centerY - (hasTools ? height - 4 : height / 2)
 
             activeFocusOnTab: hasTools
             Accessible.role: Accessible.Button
@@ -226,18 +226,22 @@ Item {
 
             Rectangle {
                 visible: grip.hasTools
-                width: grip.width
-                height: toolsLabel.implicitHeight + 8
-                anchors.verticalCenter: parent.verticalCenter
-                radius: 6
-                color: toolHover.hovered || grip.activeFocus ? Colors.primary : Colors.surfaceContainerHighest
-                border.color: Colors.primary
+                anchors.centerIn: parent
+                width: 26
+                height: width
+                radius: width / 2
+                antialiasing: true
+                color: Colors.primary
+                border.width: toolHover.hovered || grip.activeFocus ? 1 : 0
+                border.color: Colors.overPrimary
 
                 Text {
-                    id: toolsLabel
                     anchors.centerIn: parent
-                    text: "Tools"
-                    color: toolHover.hovered || grip.activeFocus ? Colors.overPrimary : Colors.overSurface
+                    text: "\uf0ad" // Wrench
+                    font.family: "Symbols Nerd Font Mono"
+                    font.pixelSize: 14
+                    renderType: Text.CurveRendering
+                    color: Colors.overPrimary
                 }
 
                 HoverHandler {
@@ -253,7 +257,8 @@ Item {
             }
 
             HoverHandler {
-                cursorShape: horizontalEdge ? Qt.SizeVerCursor : verticalEdge ? Qt.SizeHorCursor
+                cursorShape: toolHover.hovered ? Qt.PointingHandCursor
+                    : horizontalEdge ? Qt.SizeVerCursor : verticalEdge ? Qt.SizeHorCursor
                     : index === 0 || index === 3 ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
             }
 

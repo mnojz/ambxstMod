@@ -67,7 +67,7 @@ WlSessionLockSurface {
 
     // Processes for user info
     Process {
-        id: usernameProc
+
         command: ["whoami"]
         running: true
 
@@ -78,12 +78,12 @@ WlSessionLockSurface {
     }
 
     Process {
-        id: hostnameProc
+
         command: ["hostname"]
         running: true
 
         stdout: StdioCollector {
-            id: hostnameCollector
+
             waitForEnd: true
         }
     }
@@ -96,12 +96,12 @@ WlSessionLockSurface {
 
     // Proceso para verificar tiempo de faillock
     Process {
-        id: failLockCheck
+
         command: ["bash", "-c", `faillock --user '${usernameCollector.text.trim().replace(/'/g, "'\\''")}' 2>/dev/null | grep -oP 'left \\K[0-9]+' | head -1`]
         running: false
 
         stdout: StdioCollector {
-            id: failLockCollector
+
 
             onStreamFinished: {
                 const output = text.trim();

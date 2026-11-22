@@ -11,9 +11,6 @@ Button {
     required property var shortcutAction
     required property bool usable
     property real renderScale: 1
-    property bool toggleMode: false
-    property bool selected: false
-    signal selectionRequested()
     property bool armed: false
     property bool failed: false
     readonly property real designWidth: 44
@@ -25,8 +22,6 @@ Button {
     hoverEnabled: usable
     enabled: usable && !runner.running
     Accessible.name: shortcutAction.label
-    Accessible.checkable: toggleMode
-    Accessible.checked: toggleMode && selected
 
     ToolTip.visible: usable && (hovered || armed || failed)
     ToolTip.text: failed ? shortcutAction.label + " failed"
@@ -41,10 +36,6 @@ Button {
     onClicked: {
         if (!usable)
             return;
-        if (toggleMode) {
-            selectionRequested();
-            return;
-        }
         if (!armed) {
             failed = false;
             armed = true;
@@ -79,11 +70,10 @@ Button {
     background: Rectangle {
         radius: width / 2
         antialiasing: true
-        color: root.selected ? Colors.primary
-            : root.armed ? Colors.primaryContainer
+        color: root.armed ? Colors.primaryContainer
             : root.hovered ? Colors.surfaceContainerHighest : Colors.surfaceContainerHigh
         border.color: root.armed || root.visualFocus ? Colors.primary : Colors.outlineVariant
-        border.width: root.selected ? 0 : Math.max(1, root.renderScale)
+        border.width: Math.max(1, root.renderScale)
     }
 
     contentItem: Item {
@@ -93,7 +83,7 @@ Button {
             font.family: Icons.font
             font.pixelSize: Math.max(1, Math.round(20 * root.renderScale))
             renderType: Text.CurveRendering
-            color: root.selected ? Colors.overPrimary : root.armed ? Colors.overPrimaryContainer : Colors.overSurface
+            color: root.armed ? Colors.overPrimaryContainer : Colors.overSurface
         }
     }
 }

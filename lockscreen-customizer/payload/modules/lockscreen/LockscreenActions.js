@@ -5,12 +5,15 @@ var available = [
     { id: "reboot", label: "Restart", icon: "reboot", command: ["systemctl", "reboot"] }
 ];
 
-function toggle(shortcuts, id) {
+function setEnabled(shortcuts, id, enabled) {
     const existing = shortcuts.find(shortcut => shortcut?.id === id);
     if (existing) {
         return shortcuts.map(shortcut => shortcut === existing
-            ? Object.assign({}, shortcut, { enabled: existing.enabled === false }) : shortcut);
+            ? Object.assign({}, shortcut, { enabled }) : shortcut);
     }
+
+    if (!enabled)
+        return shortcuts;
 
     const slot = [0, 0.08].find(x => !shortcuts.some(shortcut =>
         shortcut?.enabled !== false && available.some(action => action.id === shortcut?.id) && shortcut?.x === x));

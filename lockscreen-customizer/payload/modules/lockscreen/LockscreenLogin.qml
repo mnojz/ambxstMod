@@ -174,7 +174,7 @@ Item {
                         }
 
                         Timer {
-                            id: spinnerTimer
+
                             interval: 100
                             repeat: true
                             running: login.authenticating

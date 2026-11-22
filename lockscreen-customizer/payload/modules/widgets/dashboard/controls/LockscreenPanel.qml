@@ -14,7 +14,6 @@ import qs.modules.lockscreen
 import qs.modules.theme
 import "../../../../config/defaults/lockscreen.js" as Defaults
 import "../../../../modules/lockscreen/LockscreenPlacement.js" as Placement
-import "../../../../modules/lockscreen/LockscreenActions.js" as Actions
 
 Control {
     id: root
@@ -120,16 +119,7 @@ Control {
     }
 
     function applyPreset(preset) {
-        if (!editorWidget) {
-            edit(preset.values);
-            return;
-        }
-        const values = Object.assign({}, preset.values);
-        delete values[editorWidget + "Position"];
-        delete values[editorWidget + "X"];
-        delete values[editorWidget + "Y"];
-        delete values[editorWidget === "clock" ? "clockSize" : editorWidget + "Scale"];
-        edit(values);
+        edit(preset.values);
     }
 
     function path(url) {
@@ -213,7 +203,7 @@ Control {
         id: libraryProcess
 
         stdout: StdioCollector {
-            id: libraryOutput
+
             waitForEnd: true
             onStreamFinished: {
                 try {
@@ -636,8 +626,10 @@ Control {
             width: 38
             height: 20
             radius: height / 2
-            color: toggle.checked ? Colors.primary : Colors.surfaceContainerHighest
-            border.color: toggle.visualFocus ? Colors.outline : "transparent"
+            color: !toggle.enabled ? Colors.surfaceContainerLow
+                : toggle.checked ? Colors.primary : Colors.surfaceContainerHighest
+            border.color: toggle.visualFocus ? Colors.primary : Colors.outline
+            border.width: toggle.enabled ? 1 : 0
 
             Rectangle {
                 x: toggle.checked ? parent.width - width - 3 : 3
@@ -645,7 +637,8 @@ Control {
                 width: 14
                 height: width
                 radius: width / 2
-                color: toggle.checked ? Colors.overPrimary : Colors.outline
+                color: !toggle.enabled ? Colors.outlineVariant
+                    : toggle.checked ? Colors.overPrimary : Colors.overSurface
             }
         }
     }
@@ -725,7 +718,7 @@ Control {
         rowSpacing: 8
 
         Repeater {
-            model: !root.editorWidget || root.editorWidget === grid.kind ? grid.options : []
+            model: root.editorWidget === grid.kind ? grid.options : []
 
             delegate: Button {
                 id: preset
@@ -788,7 +781,7 @@ Control {
                                 LockscreenClock {
                                     anchors.centerIn: parent
                                     settings: Object.assign({}, sample.settings, {
-                                        clockSeconds: false, clockGreeting: false, clockFormat: "24h",
+                                        clockSize: preset.modelData.sampleSize, clockSeconds: false, clockGreeting: false, clockFormat: "24h",
                                         clockDateRatio: Math.max(23, sample.settings.clockDateRatio)
                                     })
                                     live: false
@@ -808,7 +801,7 @@ Control {
                                     settings: sample.settings
                                     sample: true
                                     renderScale: Math.max(0.01, Math.min(parent.width / (designWidth * 1.17),
-                                                    parent.height / (designHeight * 1.25)) * Math.min(1.25, sample.settings.mediaScale / 100))
+                                                    parent.height / (designHeight * 1.25)) * Math.min(1.25, preset.modelData.sampleSize / 100))
                                 }
                             }
                         }
@@ -823,7 +816,7 @@ Control {
                                     interactive: false
                                     animate: false
                                     renderScale: Math.max(0.01, Math.min(parent.width / 465,
-                                                    parent.height / Math.max(130, designHeight * 1.3)) * sample.settings.loginScale / 100)
+                                                    parent.height / Math.max(130, designHeight * 1.3)) * preset.modelData.sampleSize / 100)
                                 }
                             }
                         }
@@ -1098,7 +1091,7 @@ Control {
                     label: "Slideshow interval"
                     visible: root.mode === "slideshow"
                     FlatCombo {
-                        id: intervalPicker
+
                         readonly property var seconds: [...new Set([5, 10, 30, 60, 120, root.settings.wallpaperInterval])].sort((a, b) => a - b)
                         model: seconds.map(value => value + " s")
                         currentIndex: seconds.indexOf(root.settings.wallpaperInterval)
@@ -1136,15 +1129,15 @@ Control {
             Section {
                 id: clockSection
                 title: "Clock"
-                visible: !root.editorWidget || root.editorWidget === "clock"
+                visible: root.editorWidget === "clock"
 
                 PresetGrid {
                     kind: "clock"
                     options: [
-                        { name: "Glance", values: { clockStyle: "inline", clockFont: "", clockSize: 112, clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 21, clockWeight: "light", clockLetterSpacing: 4, clockPosition: "top-center", clockX: -1, clockY: -1 } },
-                        { name: "Ambxst", values: { clockStyle: "offset", clockFont: "League Gothic", clockSize: 240, clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 15, clockWeight: "regular", clockLetterSpacing: 0, clockPosition: "center-center", clockX: -1, clockY: -1 } },
-                        { name: "Stacked", values: { clockStyle: "stacked", clockFont: "", clockSize: 152, clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 24, clockWeight: "semibold", clockLetterSpacing: 0, clockPosition: "center-left", clockX: -1, clockY: -1 } },
-                        { name: "Orbit", values: { clockStyle: "orbit", clockSize: 240, clockDate: false, clockWeekday: "hide", clockTimeRatio: 100, clockDateRatio: 10, clockWeight: "regular", clockLetterSpacing: 0, clockPosition: "center-center", clockX: -1, clockY: -1 } }
+                        { name: "Glance", sampleSize: 112, values: { clockStyle: "inline", clockFont: "", clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 21, clockWeight: "light", clockLetterSpacing: 4 } },
+                        { name: "Ambxst", sampleSize: 240, values: { clockStyle: "offset", clockFont: "League Gothic", clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 15, clockWeight: "regular", clockLetterSpacing: 0 } },
+                        { name: "Stacked", sampleSize: 152, values: { clockStyle: "stacked", clockFont: "", clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 24, clockWeight: "semibold", clockLetterSpacing: 0 } },
+                        { name: "Orbit", sampleSize: 240, values: { clockStyle: "orbit", clockDate: false, clockWeekday: "hide", clockTimeRatio: 100, clockDateRatio: 10, clockWeight: "regular", clockLetterSpacing: 0 } }
                     ]
                 }
 
@@ -1260,96 +1253,43 @@ Control {
 
             Section {
                 title: "Media player"
-                visible: !root.editorWidget || root.editorWidget === "media"
-                headerAction: Component {
-                    ThemeSwitch {
-                        checked: root.settings.mediaVisible
-                        onToggled: root.setSetting("mediaVisible", checked)
-                        Accessible.name: "Show media player"
-                        ToolTip.visible: hovered
-                        ToolTip.text: checked ? "Hide media player" : "Show media player"
-                    }
-                }
-
+                visible: root.editorWidget === "media"
                 PresetGrid {
                     kind: "media"
                     options: [
-                        { name: "Ambxst", values: { mediaStyle: "bg", mediaArtwork: true, mediaScale: 100, mediaPosition: "legacy", mediaX: -1, mediaY: -1 } },
-                        { name: "Compact", values: { mediaStyle: "compact", mediaArtwork: false, mediaScale: 75, mediaPosition: "bottom-left", mediaX: -1, mediaY: -1 } },
-                        { name: "Now playing", values: { mediaStyle: "pane", mediaArtwork: true, mediaScale: 125, mediaPosition: "bottom-right", mediaX: -1, mediaY: -1 } },
-                        { name: "Cover", values: { mediaStyle: "cover", mediaArtwork: false, mediaScale: 100, mediaPosition: "bottom-left", mediaX: -1, mediaY: -1 } },
-                        { name: "Ribbon", values: { mediaStyle: "ribbon", mediaArtwork: false, mediaScale: 100, mediaPosition: "bottom-left", mediaX: -1, mediaY: -1 } },
-                        { name: "Outline", values: { mediaStyle: "outline", mediaArtwork: false, mediaScale: 100, mediaPosition: "bottom-right", mediaX: -1, mediaY: -1 } }
+                        { name: "Ambxst", sampleSize: 100, values: { mediaStyle: "bg", mediaArtwork: true } },
+                        { name: "Compact", sampleSize: 75, values: { mediaStyle: "compact", mediaArtwork: false } },
+                        { name: "Now playing", sampleSize: 125, values: { mediaStyle: "pane", mediaArtwork: true } },
+                        { name: "Cover", sampleSize: 100, values: { mediaStyle: "cover", mediaArtwork: false } },
+                        { name: "Ribbon", sampleSize: 100, values: { mediaStyle: "ribbon", mediaArtwork: false } },
+                        { name: "Outline", sampleSize: 100, values: { mediaStyle: "outline", mediaArtwork: false } }
                     ]
                 }
             }
 
             Section {
                 title: "Login"
-                visible: !root.editorWidget || root.editorWidget === "login"
+                visible: root.editorWidget === "login"
 
                 PresetGrid {
                     kind: "login"
                     options: [
-                        { name: "Ambxst", values: { loginStyle: "bg", loginAvatar: true, loginScale: 100, loginPosition: "legacy", loginX: -1, loginY: -1 } },
-                        { name: "Minimal", values: { loginStyle: "plain", loginAvatar: false, loginScale: 90, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
-                        { name: "Profile", values: { loginStyle: "pane", loginAvatar: true, loginScale: 130, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
-                        { name: "Badge", values: { loginStyle: "badge", loginAvatar: true, loginScale: 100, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
-                        { name: "Underline", values: { loginStyle: "line", loginAvatar: false, loginScale: 100, loginPosition: "bottom-center", loginX: -1, loginY: -1 } },
-                        { name: "Sign-in card", values: { loginStyle: "card", loginAvatar: false, loginScale: 100, loginPosition: "bottom-center", loginX: -1, loginY: -1 } }
+                        { name: "Ambxst", sampleSize: 100, values: { loginStyle: "bg", loginAvatar: true } },
+                        { name: "Minimal", sampleSize: 90, values: { loginStyle: "plain", loginAvatar: false } },
+                        { name: "Profile", sampleSize: 130, values: { loginStyle: "pane", loginAvatar: true } },
+                        { name: "Badge", sampleSize: 100, values: { loginStyle: "badge", loginAvatar: true } },
+                        { name: "Underline", sampleSize: 100, values: { loginStyle: "line", loginAvatar: false } },
+                        { name: "Sign-in card", sampleSize: 100, values: { loginStyle: "card", loginAvatar: false } }
                     ]
                 }
 
                 SettingRow {
                     label: "Show profile picture"
-                    Switch {
+                    ThemeSwitch {
                         checked: root.settings.loginAvatar
                         onToggled: root.setSetting("loginAvatar", checked)
                         Accessible.name: "Show profile picture"
                     }
-                }
-            }
-            Section {
-                id: shortcutsSection
-                title: "Shortcuts"
-                visible: !root.editorWidget
-                readonly property var configured: Array.from(root.settings.shortcuts ?? [])
-                readonly property bool hasSelection: Actions.available.some(action => isSelected(action.id))
-
-                function isSelected(id) {
-                    return configured.some(shortcut => shortcut?.id === id && shortcut.enabled !== false);
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    Repeater {
-                        model: Actions.available
-
-                        delegate: LockscreenShortcut {
-                            required property var modelData
-                            shortcutAction: modelData
-                            usable: true
-                            toggleMode: true
-                            selected: shortcutsSection.isSelected(modelData.id)
-                            Layout.preferredWidth: designWidth
-                            Layout.preferredHeight: designHeight
-                            onSelectionRequested: root.setSetting("shortcuts",
-                                Actions.toggle(shortcutsSection.configured, modelData.id))
-                        }
-                    }
-
-                    Item { Layout.fillWidth: true }
-                }
-
-                ActionButton {
-                    Layout.fillWidth: true
-                    label: "Edit shortcut layout"
-                    glyph: Icons.edit
-                    Accessible.name: label
-                    enabled: shortcutsSection.hasSelection
-                    onClicked: root.openOverlay(true)
                 }
             }
 

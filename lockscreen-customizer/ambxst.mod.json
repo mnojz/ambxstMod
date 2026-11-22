@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mnojz.lockscreen-customizer",
   "name": "Lock Screen Customizer",
-  "version": "1.4.0",
+  "version": "1.5.3",
   "description": "Adds a dedicated Ambxst Settings tab for lock screen wallpapers, clock, media player, and login appearance.",
   "author": "mnojz",
   "compatibility": {
