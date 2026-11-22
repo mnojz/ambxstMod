@@ -10,6 +10,8 @@ import qs.modules.globals
 import qs.modules.theme
 import qs.modules.widgets.dashboard.controls
 import qs.config
+import "../../config/defaults/lockscreen.js" as Defaults
+import "LockscreenPresets.js" as Presets
 
 PanelWindow {
     id: root
@@ -21,6 +23,19 @@ PanelWindow {
     property string inspectorWidget: ""
     property bool inspectorOnRight: false
     property Item inspectorHandle
+    property var presetBaselines: ({})
+
+    Component.onCompleted: {
+        if (!editing)
+            return;
+        const baselines = {};
+        const stored = Array.from(settings.widgetPresetBaselines ?? []);
+        for (const widget of ["clock", "media", "login"]) {
+            const values = stored.find(entry => entry?.widget === widget)?.values ?? settings;
+            baselines[widget] = Presets.valuesFor(widget, values, Defaults.data);
+        }
+        presetBaselines = baselines;
+    }
 
     readonly property rect inspectedBounds: inspectorHandle
         ? Qt.rect(inspectorHandle.x, inspectorHandle.y, inspectorHandle.width, inspectorHandle.height)
@@ -53,6 +68,27 @@ PanelWindow {
             if (GlobalStates.lockscreenVisible)
                 root.dismiss();
         }
+    }
+
+    function editLayout(values) {
+        const stored = Array.from(settings.widgetPresetBaselines ?? []);
+        const keys = Object.keys(values);
+        let changed = false;
+        for (const widget of Object.keys(presetBaselines)) {
+            const baseline = presetBaselines[widget];
+            if (!keys.some(key => key in baseline))
+                continue;
+            const index = stored.findIndex(entry => entry?.widget === widget);
+            if (JSON.stringify(stored[index]?.values) === JSON.stringify(baseline))
+                continue;
+            const entry = { widget, values: baseline };
+            if (index < 0)
+                stored.push(entry);
+            else
+                stored[index] = entry;
+            changed = true;
+        }
+        layoutEdited(changed ? Object.assign({}, values, { widgetPresetBaselines: stored }) : values);
     }
 
     function closePreview() {
@@ -107,7 +143,7 @@ PanelWindow {
             editing: root.editing
             settings: root.settings
             videoPoster: root.videoPoster
-            onLayoutEdited: values => root.layoutEdited(values)
+            onLayoutEdited: values => root.editLayout(values)
             onDismiss: root.inspectorWidget ? root.closeInspector() : root.closePreview()
             onSelectedWidgetChanged: {
                 if (root.inspectorWidget && root.inspectorWidget !== selectedWidget)
@@ -252,13 +288,18 @@ PanelWindow {
 
         component EditorButton: Basic.Button {
             id: action
+            property string helpText: ""
+            ToolTip.text: helpText
+            ToolTip.delay: 500
+            ToolTip.visible: hovered && helpText !== ""
             property bool destructive: false
+            property bool circular: false
             hoverEnabled: true
             horizontalPadding: 12
             verticalPadding: 7
 
             background: Rectangle {
-                radius: 6
+                radius: action.circular ? height / 2 : 6
                 color: action.destructive
                     ? (action.hovered || action.down ? Qt.tint(Colors.red, Qt.alpha(Colors.overRed, 0.12)) : Colors.red)
                     : action.hovered || action.down
@@ -312,7 +353,8 @@ PanelWindow {
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: 10
-                        Layout.rightMargin: 4
+                        Layout.rightMargin: 6
+                        Layout.topMargin: 6
 
                         Label {
                             Layout.fillWidth: true
@@ -322,7 +364,14 @@ PanelWindow {
                         }
 
                         EditorButton {
-                            text: "Close"
+                            text: "×"
+                            circular: true
+                            Layout.preferredWidth: 30
+                            Layout.preferredHeight: 30
+                            padding: 0
+                            font.pixelSize: 21
+                            Accessible.name: "Close widget settings"
+                            helpText: "Close this panel and return to the layout editor."
                             focus: true
                             onClicked: root.closeInspector()
                         }
@@ -333,7 +382,11 @@ PanelWindow {
                         Layout.fillHeight: true
                         editorWidget: root.inspectorWidget
                         editorSettings: root.settings
-                        onEditorValuesChanged: values => root.layoutEdited(values)
+                        editorPresetBaseline: root.presetBaselines[editorWidget] ?? root.settings
+                        onEditorPresetApplied: (widget, values) => {
+                            root.presetBaselines = Object.assign({}, root.presetBaselines, { [widget]: values });
+                        }
+                        onEditorValuesChanged: values => root.editLayout(values)
                     }
 
                     EditorButton {
@@ -342,6 +395,7 @@ PanelWindow {
                         visible: root.inspectorWidget !== "login"
                         destructive: true
                         text: "Remove widget"
+                        helpText: "Remove this widget from the lock screen layout."
                         onClicked: scene.setWidgetEnabled(root.inspectorWidget, false)
                     }
                 }

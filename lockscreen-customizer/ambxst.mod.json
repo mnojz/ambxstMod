@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mnojz.lockscreen-customizer",
   "name": "Lock Screen Customizer",
-  "version": "1.5.4",
+  "version": "1.7.10",
   "description": "Adds a dedicated Ambxst Settings tab for lock screen wallpapers, clock, media player, and login appearance.",
   "author": "mnojz",
   "compatibility": {
@@ -55,6 +55,21 @@
       "type": "overlay",
       "source": "payload/scripts/lockscreen_wallpapers.py",
       "target": "scripts/lockscreen_wallpapers.py"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/LockscreenClockFace.qml",
+      "target": "modules/lockscreen/LockscreenClockFace.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/LockscreenWidgetShadow.qml",
+      "target": "modules/lockscreen/LockscreenWidgetShadow.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/LockscreenPresets.js",
+      "target": "modules/lockscreen/LockscreenPresets.js"
     },
     {
       "type": "overlay",

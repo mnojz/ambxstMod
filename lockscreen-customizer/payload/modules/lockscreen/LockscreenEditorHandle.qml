@@ -131,7 +131,7 @@ Item {
 
     Canvas {
         anchors.fill: parent
-        anchors.margins: -9
+        anchors.margins: -13
         visible: root.selected
         antialiasing: true
 
@@ -143,11 +143,11 @@ Item {
 
         onPaint: {
             const ctx = getContext("2d");
-            const left = 2;
-            const top = 2;
-            const right = width - 2;
-            const bottom = height - 2;
-            const radius = Math.min(24, (width - 4) / 5, (height - 4) / 5);
+            const left = 6;
+            const top = 6;
+            const right = width - left;
+            const bottom = height - top;
+            const radius = Math.min(24, (right - left) / 5, (bottom - top) / 5);
             const grip = radius + 8;
             const centerX = width / 2;
             const centerY = height / 2;
@@ -156,10 +156,13 @@ Item {
 
             ctx.reset();
             ctx.strokeStyle = stroke;
+            ctx.shadowColor = Qt.rgba(0, 0, 0, 0.65);
+            ctx.shadowBlur = 3;
+            ctx.shadowOffsetY = 1;
             ctx.lineWidth = 2;
             ctx.setLineDash([3, 5]);
             ctx.beginPath();
-            ctx.roundedRect(6, 6, width - 12, height - 12, Math.max(0, radius - 4), Math.max(0, radius - 4));
+            ctx.roundedRect(left + 4, top + 4, right - left - 8, bottom - top - 8, Math.max(0, radius - 4), Math.max(0, radius - 4));
             ctx.stroke();
 
             ctx.setLineDash([]);

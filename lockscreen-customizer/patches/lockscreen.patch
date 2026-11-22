@@ -39,7 +39,7 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
              root.pauseAutoSave = true;
              reload();
              root.pauseAutoSave = false;
-@@ -947,12 +963,117 @@
+@@ -947,12 +963,129 @@
          onPathChanged: reload()
          onAdapterUpdated: {
              if (root.lockscreenReady && !root.pauseAutoSave) {
@@ -56,6 +56,7 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
 +            property string wallpaperVideo: ""
 +            property int wallpaperInterval: 30
 +            property int wallpaperBlur: 0
++            property int wallpaperDim: 0
 +            property bool wallpaperTint: false
 +            property string clockStyle: "offset"
 +            property string clockFont: "League Gothic"
@@ -89,6 +90,17 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
 +            property string mediaStyle: "bg"
 +            property real loginX: -1.0
 +            property real loginY: -1.0
++            property bool clockShadow: false
++            property bool loginShadow: false
++            property bool mediaShadow: false
++            property int mediaRadius: -1
++            property int mediaThumbnailRatio: -1
++            property int mediaThumbnailRadius: -1
++            property string clockPreset: ""
++            property string mediaPreset: ""
++            property string loginPreset: ""
++            property list<var> widgetPresets: []
++            property list<var> widgetPresetBaselines: []
 +            property list<var> shortcuts: []
 +        }
 +    }
@@ -162,7 +174,7 @@ diff --git a/config/defaults/lockscreen.js b/config/defaults/lockscreen.js
 index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b7139891d66491 100644
 --- a/config/defaults/lockscreen.js
 +++ b/config/defaults/lockscreen.js
-@@ -1,5 +1,45 @@
+@@ -1,5 +1,57 @@
  .pragma library
  
  var data = {
@@ -174,6 +186,7 @@ index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b71398
 +    "wallpaperVideo": "",
 +    "wallpaperInterval": 30,
 +    "wallpaperBlur": 0,
++    "wallpaperDim": 0,
 +    "wallpaperTint": false,
 +    "clockStyle": "offset",
 +    "clockFont": "League Gothic",
@@ -207,6 +220,17 @@ index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b71398
 +    "mediaStyle": "bg",
 +    "loginX": -1.0,
 +    "loginY": -1.0,
++    "clockShadow": false,
++    "loginShadow": false,
++    "mediaShadow": false,
++    "mediaRadius": -1,
++    "mediaThumbnailRatio": -1,
++    "mediaThumbnailRadius": -1,
++    "clockPreset": "",
++    "mediaPreset": "",
++    "loginPreset": "",
++    "widgetPresets": [],
++    "widgetPresetBaselines": [],
 +    "shortcuts": []
  }
 diff --git a/modules/widgets/dashboard/controls/SettingsIndex.qml b/modules/widgets/dashboard/controls/SettingsIndex.qml
@@ -373,366 +397,6 @@ index 9723b55d33c11fd0aa375306596edf3bb70ce56e..8bbde567ba03915599bbda37fc9861a2
                      // DESKTOP SECTION
                      // ═══════════════════════════════════════════════════════════════
                      ColumnLayout {
-diff --git a/modules/widgets/dashboard/widgets/LockPlayer.qml b/modules/widgets/dashboard/widgets/LockPlayer.qml
-index cc1d673e286f551887c5b3e517db70ed626013a5..33ec0ce93fddf28c0b020fa67c4a774e06943798 100644
---- a/modules/widgets/dashboard/widgets/LockPlayer.qml
-+++ b/modules/widgets/dashboard/widgets/LockPlayer.qml
-@@ -6,12 +6,29 @@
- import qs.modules.theme
- import qs.modules.components
- import qs.modules.services
-+import qs.modules.globals
- import qs.config
-
- StyledRect {
-     id: lockPlayer
-     variant: "bg"
-
-+    property bool artworkBackground: true
-+    property bool sample: false
-+    property bool compact: false
-+    property real renderScale: 1
-+    property string visualStyle: "bg"
-+    readonly property bool nowPlayingLayout: visualStyle === "pane"
-+    readonly property bool coverLayout: visualStyle === "cover"
-+    readonly property bool ribbonLayout: visualStyle === "ribbon"
-+    readonly property bool outlineLayout: visualStyle === "outline"
-+    readonly property bool hasFrontArtwork: !ribbonLayout && !outlineLayout
-+    readonly property real unscaledHeight: coverLayout ? 142 : nowPlayingLayout ? 112 : ribbonLayout ? 66 : compact ? 76 : 96
-+    readonly property real frontArtSize: coverLayout ? 104 : compact ? 44 : 64
-+
-+    function px(value) {
-+        return Math.max(1, Math.round(value * renderScale));
-+    }
-     property bool isPlaying: MprisController.activePlayer?.playbackState === MprisPlaybackState.Playing
-     property real position: MprisController.activePlayer?.position ?? 0.0
-     property real length: MprisController.activePlayer?.length ?? 1.0
-@@ -23,10 +40,21 @@
-         return frame ? "file://" + frame : "";
-     }
-
--    visible: MprisController.activePlayer !== null
--    height: 96
--    radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
--    backgroundOpacity: (MprisController.activePlayer || wallpaperPath !== "") ? 0.0 : 1.0
-+    visible: sample || MprisController.activePlayer !== null
-+    height: unscaledHeight * renderScale
-+    radius: outlineLayout || coverLayout ? px(14) : Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
-+    enableBorder: !outlineLayout
-+    backgroundOpacity: outlineLayout ? 0 : artworkBackground && (MprisController.activePlayer || wallpaperPath !== "") ? 0.0 : 1.0
-+
-+    Rectangle {
-+        anchors.fill: parent
-+        visible: lockPlayer.outlineLayout
-+        radius: lockPlayer.radius
-+        color: "transparent"
-+        border.color: Colors.primary
-+        border.width: lockPlayer.px(1)
-+        antialiasing: true
-+    }
-
-     Behavior on backgroundOpacity {
-         enabled: Config.animDuration > 0
-@@ -38,6 +66,7 @@
-
-     // Blurred wallpaper background fallback
-     ClippingRectangle {
-+        visible: lockPlayer.artworkBackground
-         anchors.fill: parent
-         radius: lockPlayer.radius
-         color: "transparent"
-@@ -47,7 +76,7 @@
-             id: lockPlayerBgArt
-             sourceSize: Qt.size(64, 64)
-             anchors.fill: parent
--            source: (MprisController.activePlayer?.trackArtUrl ?? "") !== "" ? MprisController.activePlayer.trackArtUrl : lockPlayer.wallpaperPath
-+            source: !lockPlayer.artworkBackground ? "" : (MprisController.activePlayer?.trackArtUrl ?? "") !== "" ? MprisController.activePlayer.trackArtUrl : lockPlayer.wallpaperPath
-             fillMode: Image.PreserveAspectCrop
-             asynchronous: true
-             visible: false
-@@ -79,7 +108,7 @@
-     }
-
-     Timer {
--        running: lockPlayer.isPlaying && lockPlayer.visible
-+        running: !lockPlayer.sample && lockPlayer.isPlaying && lockPlayer.visible
-         interval: 1000
-         repeat: true
-         onTriggered: {
-@@ -102,8 +131,8 @@
-     Item {
-         id: noPlayerContainer
-         anchors.fill: parent
--        anchors.margins: 16
--        visible: !MprisController.activePlayer && wallpaperPath === ""
-+        anchors.margins: lockPlayer.px(16)
-+        visible: !lockPlayer.sample && !MprisController.activePlayer && wallpaperPath === ""
-
-         Loader {
-             active: noPlayerContainer.visible
-@@ -135,11 +164,12 @@
-
-     RowLayout {
-         id: contentLayout
-+        enabled: !lockPlayer.sample
-         anchors.fill: parent
--        anchors.margins: 16
--        anchors.rightMargin: 28
--        spacing: 16
--        visible: MprisController.activePlayer || wallpaperPath !== ""
-+        anchors.margins: lockPlayer.px(16)
-+        anchors.rightMargin: lockPlayer.px(28)
-+        spacing: lockPlayer.px(16)
-+        visible: lockPlayer.sample || MprisController.activePlayer || wallpaperPath !== ""
-
-         // Album artwork con botón de play/pause superpuesto
-     Connections {
-@@ -153,42 +183,41 @@
-
-     Item {
-
--            Layout.preferredWidth: 64
--            Layout.preferredHeight: 64
-+            visible: lockPlayer.hasFrontArtwork
-+            Layout.preferredWidth: lockPlayer.px(lockPlayer.frontArtSize)
-+            Layout.preferredHeight: lockPlayer.px(lockPlayer.frontArtSize)
-             Layout.alignment: Qt.AlignVCenter
-
-             ClippingRectangle {
-                 id: artworkContainer
-                 anchors.fill: parent
--                radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
--                color: Colors.surface
-+                radius: lockPlayer.coverLayout || lockPlayer.nowPlayingLayout ? lockPlayer.px(12) : Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
-+                color: Colors.surfaceContainerHighest
-+                clip: true
-+                antialiasing: true
-
-                 Image {
-                     mipmap: true
-                     id: albumArt
--                    sourceSize: Qt.size(128, 128)
-+                    readonly property int targetPixels: 32 * Math.max(1, Math.ceil(width * (Screen.devicePixelRatio || 1) * 1.25 / 32))
-+                    sourceSize: Qt.size(targetPixels, targetPixels)
-                     anchors.fill: parent
-                     source: (MprisController.activePlayer?.trackArtUrl ?? "") !== "" ? MprisController.activePlayer.trackArtUrl : lockPlayer.wallpaperPath
-                     fillMode: Image.PreserveAspectCrop
-                     asynchronous: true
--                    visible: false
--                }
--
--                MultiEffect {
--                    anchors.fill: parent
--                    source: albumArt
--                    // Only enable blur when hovered (saves GPU)
--                    blurEnabled: playPauseHover.hovered
--                    blurMax: 32
--                    blur: playPauseHover.hovered ? 0.75 : 0
--
--                    Behavior on blur {
--                        enabled: Config.animDuration > 0
--                        NumberAnimation {
--                            duration: Config.animDuration
--                            easing.type: Easing.OutQuart
--                        }
--                    }
-+                    smooth: true
-+                    retainWhileLoading: true
-+                }
-+
-+                Text {
-+
-+                    renderType: Text.CurveRendering
-+                    anchors.centerIn: parent
-+                    visible: albumArt.status !== Image.Ready
-+                    text: Icons.play
-+                    font.family: Icons.font
-+                    font.pixelSize: lockPlayer.px(24)
-+                    color: Colors.primaryFixed
-                 }
-
-                 StyledRect {
-@@ -208,11 +237,12 @@
-
-             // Botón de play/pause superpuesto (visible solo en hover)
-             Text {
-+                renderType: Text.CurveRendering
-                 anchors.centerIn: parent
-                 text: lockPlayer.isPlaying ? Icons.pause : Icons.play
--                textFormat: Text.RichText
-+                textFormat: Text.PlainText
-                 color: Styling.srItem("overprimary")
--                font.pixelSize: 24
-+                font.pixelSize: lockPlayer.px(24)
-                 font.family: Icons.font
-                 opacity: playPauseHover.hovered ? 1.0 : 0.0
-                 visible: MprisController.canTogglePlaying
-@@ -242,7 +272,7 @@
-         ColumnLayout {
-             Layout.fillWidth: true
-             Layout.fillHeight: true
--            spacing: 4
-+            spacing: lockPlayer.px(4)
-
-             // Título y artista
-             ColumnLayout {
-@@ -250,11 +280,25 @@
-                 spacing: 0
-
-                 Text {
-+                    visible: lockPlayer.nowPlayingLayout
-                     Layout.fillWidth: true
--                    text: MprisController.activePlayer?.trackTitle ?? "No hay reproducción activa"
-+                    text: "NOW PLAYING"
-+                    color: Colors.primaryFixed
-+                    font.family: Config.theme.font
-+                    font.pixelSize: lockPlayer.px(10)
-+                    font.weight: Font.DemiBold
-+                    renderType: Text.CurveRendering
-+                    elide: Text.ElideRight
-+                }
-+
-+                Text {
-+
-+                    renderType: Text.CurveRendering
-+                    Layout.fillWidth: true
-+                    text: MprisController.activePlayer?.trackTitle ?? "Track title"
-                     textFormat: Text.PlainText
-                     color: Colors.overBackground
--                    font.pixelSize: Config.theme.fontSize
-+                    font.pixelSize: lockPlayer.px(Config.theme.fontSize)
-                     font.weight: Font.Bold
-                     font.family: Config.theme.font
-                     elide: Text.ElideRight
-@@ -263,16 +307,18 @@
-                 }
-
-                 Text {
-+
-+                    renderType: Text.CurveRendering
-                     Layout.fillWidth: true
--                    text: MprisController.activePlayer?.trackArtist ?? ""
-+                    text: MprisController.activePlayer?.trackArtist ?? (lockPlayer.sample ? "Artist" : "")
-                     textFormat: Text.PlainText
-                     color: Colors.overBackground
--                    font.pixelSize: Config.theme.fontSize
-+                    font.pixelSize: lockPlayer.px(Config.theme.fontSize)
-                     font.family: Config.theme.font
-                     elide: Text.ElideRight
-                     wrapMode: Text.NoWrap
-                     maximumLineCount: 1
--                    visible: text !== ""
-+                    visible: !lockPlayer.compact && !lockPlayer.ribbonLayout && text !== ""
-                     opacity: 0.7
-                 }
-             }
-@@ -280,14 +326,32 @@
-             // Controles
-             RowLayout {
-                 Layout.fillWidth: true
--                spacing: 8
--
--                Text {
-+                spacing: lockPlayer.px(8)
-+
-+                Text {
-+                    visible: !lockPlayer.hasFrontArtwork
-+                    text: lockPlayer.isPlaying ? Icons.pause : Icons.play
-+                    font.family: Icons.font
-+                    font.pixelSize: lockPlayer.px(21)
-+                    color: Colors.primaryFixed
-+                    renderType: Text.CurveRendering
-+
-+                    MouseArea {
-+                        anchors.fill: parent
-+                        cursorShape: Qt.PointingHandCursor
-+                        enabled: MprisController.canTogglePlaying
-+                        onClicked: MprisController.togglePlaying()
-+                    }
-+                }
-+
-+                Text {
-+
-+                    renderType: Text.CurveRendering
-                     id: previousBtn
-                     text: Icons.previous
--                    textFormat: Text.RichText
-+                    textFormat: Text.PlainText
-                     color: previousHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
--                    font.pixelSize: 20
-+                    font.pixelSize: lockPlayer.px(20)
-                     font.family: Icons.font
-                     opacity: MprisController.canGoPrevious ? 1.0 : 0.3
-
-@@ -314,7 +378,7 @@
-                 PositionSlider {
-                     id: positionSlider
-                     Layout.fillWidth: true
--                    Layout.preferredHeight: 4
-+                    Layout.preferredHeight: lockPlayer.px(4)
-
-                     player: MprisController.activePlayer
-                     useCustomColors: true
-@@ -323,11 +387,13 @@
-                 }
-
-                 Text {
-+
-+                    renderType: Text.CurveRendering
-                     id: nextBtn
-                     text: Icons.next
--                    textFormat: Text.RichText
-+                    textFormat: Text.PlainText
-                     color: nextHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
--                    font.pixelSize: 20
-+                    font.pixelSize: lockPlayer.px(20)
-                     font.family: Icons.font
-                     opacity: MprisController.canGoNext ? 1.0 : 0.3
-
-@@ -352,7 +418,10 @@
-                 }
-
-                 Text {
-+
-+                    renderType: Text.CurveRendering
-                     id: modeBtn
-+                    visible: !lockPlayer.compact && !lockPlayer.ribbonLayout
-                     text: {
-                         if (MprisController.hasShuffle)
-                             return Icons.shuffle;
-@@ -365,9 +434,9 @@
-                             return Icons.shuffle;
-                         }
-                     }
--                    textFormat: Text.RichText
-+                    textFormat: Text.PlainText
-                     color: modeHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
--                    font.pixelSize: 20
-+                    font.pixelSize: lockPlayer.px(20)
-                     font.family: Icons.font
-                     opacity: {
-                         if (!(MprisController.shuffleSupported || MprisController.loopSupported))
-@@ -409,6 +478,8 @@
-                 }
-
-                 Text {
-+
-+                    renderType: Text.CurveRendering
-                     id: playerIcon
-                     text: {
-                         if (!MprisController.activePlayer)
-@@ -427,9 +498,9 @@
-                             return Icons.telegram;
-                         return Icons.player;
-                     }
--                    textFormat: Text.RichText
-+                    textFormat: Text.PlainText
-                     color: playerIconHover.hovered ? Styling.srItem("overprimary") : Colors.overBackground
--                    font.pixelSize: 20
-+                    font.pixelSize: lockPlayer.px(20)
-                     font.family: Icons.font
-                     opacity: MprisController.activePlayer ? 1.0 : 0.3
-
 diff --git a/shell.qml b/shell.qml
 index 16826c1c4e72eb8f625deba463fb2fd0c8319ed5..af6934326f615cbee94dd6977d9dae6ac95080f4 100644
 --- a/shell.qml

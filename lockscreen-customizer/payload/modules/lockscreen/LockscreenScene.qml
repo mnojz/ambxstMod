@@ -98,7 +98,7 @@ Item {
         const sizeKey = key === "clock" ? "clockSize" : key + "Scale";
         if (Math.abs(ratio - 1) > 0.001) {
             const current = settings[sizeKey];
-            const requested = key === "clock" ? current * widget.baseScale * ratio : 100 * widget.baseScale * ratio;
+            const requested = key === "clock" ? current * widget.baseScale * ratio / designScale : 100 * widget.baseScale * ratio;
             const minimum = key === "clock" ? 32 : key === "login" ? 75 : 65;
             layoutEdited({ [sizeKey]: Math.round(Math.max(minimum, Math.min(key === "clock" ? 480 : 160, requested))) });
         }
@@ -214,6 +214,13 @@ Item {
         }
     }
 
+    Rectangle {
+        anchors.fill: parent
+        color: "black"
+        opacity: Math.max(0, Math.min(100, root.settings.wallpaperDim ?? 0)) / 100
+        visible: opacity > 0
+    }
+
     ShaderEffectSource {
         id: tintPalette
         visible: false
@@ -276,19 +283,17 @@ Item {
         z: root.activeEditHandle?.widget === clockContainer ? 12 : 10
         settings: root.settings
         visible: root.settings.clockVisible
-        designScale: root.designScale
-        shadows: !root.miniature && scale === 1
-        readonly property real baseWidth: width
-        readonly property real baseHeight: height
+        readonly property real baseWidth: designWidth
+        readonly property real baseHeight: designHeight
         readonly property var position: root.placement(root.settings.clockPosition, "center-center")
-        readonly property real baseScale: Placement.fit(width, height, parent.width, parent.height, 1, 32 * root.designScale)
+        readonly property real baseScale: Placement.fit(baseWidth, baseHeight, parent.width, parent.height, root.designScale, 32 * root.designScale)
         transformOrigin: Item.TopLeft
-        readonly property real baseX: root.coordinate(root.settings.clockX, position[1], parent.width, width * baseScale)
-        readonly property real baseY: root.coordinate(root.settings.clockY, position[0], parent.height, height * baseScale)
+        readonly property real baseX: root.coordinate(root.settings.clockX, position[1], parent.width, baseWidth * baseScale)
+        readonly property real baseY: root.coordinate(root.settings.clockY, position[0], parent.height, baseHeight * baseScale)
         readonly property rect bounds: root.visualBounds(clockContainer)
         x: bounds.x
         y: bounds.y
-        scale: width > 0 ? bounds.width / width : baseScale
+        renderScale: bounds.width / Math.max(1, baseWidth)
 
     }
 

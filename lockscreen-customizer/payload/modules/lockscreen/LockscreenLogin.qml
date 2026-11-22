@@ -20,7 +20,7 @@ Item {
     property real renderScale: 1
 
     function px(value) {
-        return Math.max(1, Math.round(value * renderScale));
+        return value * renderScale;
     }
     signal submitted(string password)
     signal rejectionFinished()
@@ -47,6 +47,12 @@ Item {
             rejectionFinished();
     }
 
+    LockscreenWidgetShadow {
+        active: login.settings.loginShadow === true
+        foreground: passwordInputBox
+        renderScale: login.renderScale
+    }
+
     Item {
         id: passwordInputBox
         anchors.fill: parent
@@ -60,6 +66,7 @@ Item {
 
         StyledRect {
             anchors.fill: parent
+            animateRadius: false
             visible: !login.minimalBackground
             variant: login.titleCard ? "pane" : "bg"
             antialiasing: true
@@ -100,9 +107,9 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     text: Icons.user
-                    renderType: Text.CurveRendering
+                    renderType: Text.NativeRendering
                     font.family: Icons.font
-                    font.pixelSize: login.px(login.portraitAbove ? 48 : 32)
+                    font.pixelSize: Math.max(1, Math.round(login.px(login.portraitAbove ? 48 : 32)))
                     color: Colors.overSurface
                     visible: userAvatar.status !== Image.Ready
                 }
@@ -114,14 +121,14 @@ Item {
                 y: login.px(11)
                 text: "Sign in"
                 font.family: Config.theme.font
-                font.pixelSize: login.px(21)
+                font.pixelSize: Math.max(1, Math.round(login.px(21)))
                 font.weight: Font.DemiBold
                 color: Colors.primaryFixed
-                renderType: Text.CurveRendering
+                renderType: Text.NativeRendering
             }
 
             // Password field
-            StyledRect {
+            Item {
                 id: passwordFieldBg
                 readonly property bool avatarInRow: login.settings.loginAvatar && !login.portraitAbove
                 width: parent.width - (avatarInRow ? avatarContainer.width + login.px(12) : 0)
@@ -129,10 +136,18 @@ Item {
                 x: avatarInRow && !login.badgeLayout ? avatarContainer.width + login.px(12) : 0
                 y: login.portraitAbove ? avatarContainer.y + avatarContainer.height + login.px(16)
                     : login.titleCard ? login.px(49) : (parent.height - height) / 2
-                backgroundOpacity: login.lineLayout && !passwordInputBox.showError ? 0 : -1
-                enableBorder: !login.lineLayout
-                variant: passwordInputBox.showError ? "error" : "common"
-                radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+                readonly property color item: fieldSurface.item
+
+                StyledRect {
+                    id: fieldSurface
+                    anchors.fill: parent
+                    antialiasing: true
+                    animateRadius: false
+                    backgroundOpacity: login.lineLayout && !passwordInputBox.showError ? 0 : -1
+                    enableBorder: !login.lineLayout
+                    variant: passwordInputBox.showError ? "error" : "common"
+                    radius: Config.roundness > 0 ? (height / 2) * (Config.roundness / 16) : 0
+                }
 
                 Rectangle {
                     visible: login.lineLayout
@@ -154,10 +169,10 @@ Item {
                     Text {
                         id: userIcon
                         visible: !login.lineLayout || login.authenticating
-                        renderType: Text.CurveRendering
+                        renderType: Text.NativeRendering
                         text: login.authenticating ? Icons.circleNotch : Icons.user
                         font.family: Icons.font
-                        font.pixelSize: login.px(24)
+                        font.pixelSize: Math.max(1, Math.round(login.px(24)))
                         color: passwordFieldBg.item
                         Layout.preferredWidth: login.px(24)
                         Layout.preferredHeight: login.px(24)
@@ -198,8 +213,8 @@ Item {
                         placeholderText: login.username
                         placeholderTextColor: Qt.rgba(passwordFieldBg.item.r, passwordFieldBg.item.g, passwordFieldBg.item.b, 0.5)
                         font.family: Config.theme.font
-                        font.pixelSize: login.px(Styling.fontSize(0))
-                        renderType: TextInput.CurveRendering
+                        font.pixelSize: Math.max(1, Math.round(login.px(Styling.fontSize(0))))
+                        renderType: TextInput.NativeRendering
                         color: passwordFieldBg.item
                         background: null
                         echoMode: TextInput.Password

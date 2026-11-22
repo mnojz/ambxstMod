@@ -14,13 +14,16 @@ import qs.modules.lockscreen
 import qs.modules.theme
 import "../../../../config/defaults/lockscreen.js" as Defaults
 import "../../../../modules/lockscreen/LockscreenPlacement.js" as Placement
+import "../../../../modules/lockscreen/LockscreenPresets.js" as Presets
 
 Control {
     id: root
 
     property string editorWidget: ""
     property var editorSettings
+    property var editorPresetBaseline: ({})
     signal editorValuesChanged(var values)
+    signal editorPresetApplied(string widget, var values)
 
     property int maxContentWidth: 680
     readonly property int minimumPanelWidth: 340
@@ -97,7 +100,7 @@ Control {
             const value = values[key];
             const saved = Config.customLockscreen[key];
             const equal = Array.isArray(value)
-                ? JSON.stringify(value) === JSON.stringify(Array.from(saved)) : saved === value;
+                ? JSON.stringify(value) === JSON.stringify(Array.from(saved ?? [])) : saved === value;
             if (equal)
                 delete next[key];
             else
@@ -116,10 +119,6 @@ Control {
         saveFailed = !Config.saveCustomLockscreen(changes);
         if (!saveFailed)
             setDraft({});
-    }
-
-    function applyPreset(preset) {
-        edit(preset.values);
     }
 
     function path(url) {
@@ -308,7 +307,9 @@ Control {
         id: section
         required property string title
         property bool framed: true
-        property Component headerAction
+        property Component customHeader
+        property PresetGrid presets
+        property int contentSpacing: 12
         default property alias controls: sectionContent.data
         color: framed ? Colors.surfaceContainerLow : "transparent"
         radius: Styling.radius(1)
@@ -321,9 +322,10 @@ Control {
             id: sectionContent
             anchors.fill: parent
             anchors.margins: 16
-            spacing: 12
+            spacing: section.contentSpacing
 
             RowLayout {
+                visible: section.customHeader === null
                 Layout.fillWidth: true
 
                 Label {
@@ -334,16 +336,37 @@ Control {
                     color: Colors.overSurface
                 }
 
-                Loader {
-                    visible: section.headerAction !== null
-                    sourceComponent: section.headerAction
+                Item {
+                    visible: section.presets !== null
+                    implicitWidth: savePresetButton.implicitWidth
+                    implicitHeight: savePresetButton.implicitHeight
+
+                    ActionButton {
+                        id: savePresetButton
+                        anchors.fill: parent
+                        label: "Save to preset"
+                        helpText: "Save this widget’s appearance, size, and position as a new preset."
+                        visible: section.presets?.canSavePreset ?? false
+                        onClicked: presetNameDialog.begin(null, section.presets.catalog)
+                    }
                 }
+            }
+
+            Loader {
+                Layout.fillWidth: true
+                active: section.customHeader !== null
+                visible: active
+                sourceComponent: section.customHeader
             }
         }
     }
 
     component ActionButton: Button {
         id: action
+        property string helpText: ""
+        ToolTip.text: helpText
+        ToolTip.delay: 500
+        ToolTip.visible: hovered && helpText !== ""
         property string label: ""
         property string glyph: ""
         property bool bare: false
@@ -360,7 +383,7 @@ Control {
         background: Rectangle {
             radius: 6
             color: action.bare ? "transparent"
-                : action.accent && action.enabled ? (action.hovered ? Colors.primaryContainer : Colors.primary)
+                : action.accent && action.enabled ? (action.hovered && !action.checkable ? Colors.primaryContainer : Colors.primary)
                 : action.enabled && (action.hovered || action.down) ? Colors.surfaceContainerHighest
                 : Colors.surfaceContainerHigh
             border.width: action.visualFocus ? 1 : 0
@@ -373,7 +396,7 @@ Control {
                 anchors.centerIn: parent
                 spacing: 6
                 readonly property color foreground: !action.enabled ? Colors.overSurfaceVariant
-                    : action.accent ? (action.hovered ? Colors.overPrimaryContainer : Colors.overPrimary)
+                    : action.accent ? (action.hovered && !action.checkable ? Colors.overPrimaryContainer : Colors.overPrimary)
                     : action.bare && action.hovered ? Colors.primary : Colors.overSurface
 
                 Text {
@@ -402,6 +425,10 @@ Control {
 
     component FlatCombo: Basic.ComboBox {
         id: combo
+        property string helpText: ""
+        ToolTip.text: helpText
+        ToolTip.delay: 500
+        ToolTip.visible: hovered && helpText !== ""
         hoverEnabled: true
         implicitHeight: 29
         leftPadding: 9
@@ -496,11 +523,13 @@ Control {
         id: choice
         required property string setting
         required property var options
+        required property real controlWidth
 
         FlatCombo {
-            Layout.preferredWidth: Math.min(138, viewport.width * 0.3)
+            Layout.preferredWidth: choice.controlWidth
             model: choice.options.map(option => option[0])
             currentIndex: Math.max(0, choice.options.findIndex(option => option[1] === root.settings[choice.setting]))
+            helpText: "Choose how thick the clock text looks."
             Accessible.name: choice.label
             onActivated: index => root.setSetting(choice.setting, choice.options[index][1])
         }
@@ -515,6 +544,7 @@ Control {
         model: matchingFamilies.map(family => family || "Shell font")
         currentIndex: matchingFamilies.indexOf(root.settings.clockFont)
         displayText: root.settings.clockFont || "Shell font"
+        helpText: "Search for a font or use the shell font."
         Accessible.name: "Clock font family"
         onActivated: index => root.setSetting("clockFont", matchingFamilies[index])
 
@@ -617,6 +647,11 @@ Control {
 
     component ThemeSwitch: Basic.Switch {
         id: toggle
+        hoverEnabled: true
+        property string helpText: ""
+        ToolTip.text: helpText
+        ToolTip.delay: 500
+        ToolTip.visible: hovered && helpText !== ""
         implicitWidth: 40
         implicitHeight: 26
         padding: 0
@@ -643,29 +678,39 @@ Control {
         }
     }
 
-    component ClockToggle: SettingRow {
+    component WidgetToggle: SettingRow {
         id: option
         required property string key
         property bool value: Boolean(root.settings[key])
         property var update: checked => root.setSetting(key, checked)
+        property string helpText: ""
         ThemeSwitch {
+            helpText: option.helpText
             checked: option.value
             Accessible.name: option.label
             onToggled: option.update(checked)
         }
     }
 
-    component ClockSlider: SettingRow {
+    component WidgetSlider: SettingRow {
         id: row
         required property string key
         required property int minimum
         required property int maximum
         property string unit: "%"
         property real displayValue: root.settings[key]
+        readonly property real trackWidth: Math.round(Math.min(220, viewport.width * 0.28))
+
+        FontMetrics {
+            id: sliderMetrics
+            font: sliderValue.font
+        }
+
         Basic.Slider {
             id: slider
-            Layout.fillWidth: true
-            Layout.minimumWidth: 45
+            Layout.preferredWidth: row.trackWidth
+            Layout.minimumWidth: row.trackWidth
+            Layout.maximumWidth: row.trackWidth
             implicitHeight: 24
             from: row.minimum
             to: row.maximum
@@ -702,9 +747,117 @@ Control {
             }
         }
         Label {
+            id: sliderValue
+            Layout.preferredWidth: Math.ceil(sliderMetrics.advanceWidth("-0.10 em"))
+            horizontalAlignment: Text.AlignRight
             text: row.unit === "em" ? (slider.value / 100).toFixed(2) + " em"
-                : Math.round(slider.value) + "%"
+                : Math.round(slider.value) + (row.unit === "%" ? "%" : " " + row.unit)
             color: Colors.overSurface
+        }
+    }
+
+    Basic.Popup {
+        id: presetNameDialog
+
+        property var targetPreset: null
+        property var catalog: []
+        readonly property string enteredName: presetName.text.trim()
+        readonly property bool duplicateName: catalog.some(entry => (!targetPreset || entry.builtin !== targetPreset.builtin
+            || entry.recordIndex !== targetPreset.recordIndex)
+            && entry.name.toLowerCase() === enteredName.toLowerCase())
+
+        function begin(preset, entries) {
+            targetPreset = preset;
+            catalog = entries;
+            presetName.text = preset?.name ?? "";
+            open();
+        }
+
+        function commitName() {
+            if (!enteredName || duplicateName)
+                return;
+            if (targetPreset?.name === enteredName) {
+                close();
+                return;
+            }
+            const records = Array.from(root.settings.widgetPresets ?? []);
+            const changes = { widgetPresets: records };
+            if (!targetPreset) {
+                changes[root.editorWidget + "Preset"] = "saved:" + records.length;
+                records.push(Presets.create(root.editorWidget, enteredName, root.settings, Defaults.data));
+            } else if (targetPreset.recordIndex >= 0) {
+                const index = targetPreset.recordIndex;
+                records[index] = Object.assign({}, records[index], { name: enteredName });
+            } else {
+                records.push({ schemaVersion: Presets.version, widget: root.editorWidget,
+                               builtin: targetPreset.builtin, name: enteredName });
+            }
+            root.edit(changes);
+            close();
+        }
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(320, (parent?.width ?? root.width) - 24)
+        modal: true
+        focus: true
+        padding: 14
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onOpened: {
+            presetName.forceActiveFocus();
+            presetName.selectAll();
+        }
+        onClosed: {
+            targetPreset = null;
+            catalog = [];
+        }
+
+        background: Rectangle {
+            color: Colors.surfaceContainerHigh
+            border.color: Colors.outlineVariant
+            radius: 10
+            antialiasing: true
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 8
+
+            Label {
+                text: presetNameDialog.targetPreset ? "Rename preset" : "Save to preset"
+                color: Colors.overSurface
+                font.bold: true
+            }
+
+            Basic.TextField {
+                id: presetName
+                Layout.fillWidth: true
+                maximumLength: 64
+                placeholderText: "Preset name"
+                Accessible.name: placeholderText
+                onAccepted: presetNameDialog.commitName()
+            }
+
+            Label {
+                visible: presetNameDialog.duplicateName
+                text: "That preset name is already in use."
+                color: Colors.error
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+
+                ActionButton {
+                    label: "Cancel"
+                    helpText: "Close without saving the name."
+                    onClicked: presetNameDialog.close()
+                }
+                ActionButton {
+                    label: "Save"
+                    helpText: "Confirm this preset name."
+                    enabled: presetNameDialog.enteredName !== "" && !presetNameDialog.duplicateName
+                    onClicked: presetNameDialog.commitName()
+                }
+            }
         }
     }
 
@@ -717,122 +870,198 @@ Control {
         columnSpacing: 8
         rowSpacing: 8
 
-        Repeater {
-            model: root.editorWidget === grid.kind ? grid.options : []
+        readonly property var catalog: {
+            if (root.editorWidget !== kind)
+                return [];
+            const records = Array.from(root.settings.widgetPresets ?? []);
+            const styleKey = kind + "Style";
+            const builtins = options.map(option => {
+                const builtin = option.values[styleKey];
+                const recordIndex = records.findIndex(record => record?.schemaVersion === Presets.version
+                    && record.widget === kind && record.builtin === builtin && typeof record.name === "string");
+                return Object.assign({}, option, {
+                    builtin, recordIndex, name: records[recordIndex]?.name ?? option.name
+                });
+            });
+            const saved = [];
+            records.forEach((record, recordIndex) => {
+                if (record?.schemaVersion === Presets.version && record.widget === kind
+                        && !record.builtin && typeof record.name === "string" && record.values) {
+                    saved.push({ name: record.name, values: Presets.valuesFor(kind, record.values, Defaults.data), recordIndex });
+                }
+            });
+            return [...builtins, ...saved];
+        }
 
-            delegate: Button {
-                id: preset
+        readonly property var widgetValues: Presets.valuesFor(kind, root.settings, Defaults.data)
+        readonly property var presetBaseline: Presets.valuesFor(kind, root.editorPresetBaseline, Defaults.data)
+
+        function matchesPreset(preset) {
+            const values = preset.builtin ? Object.assign({}, presetBaseline, preset.values) : preset.values;
+            const keys = Object.keys(widgetValues);
+            return keys.length > 0 && keys.every(key => widgetValues[key] === values[key]);
+        }
+
+        readonly property bool canSavePreset: {
+            if (root.editorWidget !== kind)
+                return false;
+            return Object.keys(widgetValues).some(key => widgetValues[key] !== presetBaseline[key])
+                && !catalog.some(preset => matchesPreset(preset));
+        }
+
+        function presetId(preset) {
+            return preset.builtin ? "builtin:" + preset.builtin : "saved:" + preset.recordIndex;
+        }
+
+        readonly property string selectedPreset: {
+            const current = root.settings[kind + "Preset"];
+            const matching = catalog.find(preset => presetId(preset) === current && matchesPreset(preset))
+                ?? catalog.find(preset => !preset.builtin && matchesPreset(preset))
+                ?? catalog.find(preset => matchesPreset(preset));
+            return matching ? presetId(matching) : "";
+        }
+
+        Repeater {
+            model: grid.catalog
+
+            delegate: Item {
+                id: card
                 required property var modelData
                 Layout.fillWidth: true
                 Layout.preferredWidth: 100
                 Layout.minimumWidth: 72
                 implicitHeight: grid.kind === "clock" ? 114 : 106
-                Accessible.name: modelData.name
-                readonly property var designKeys: grid.kind === "clock" ? ["clockStyle"]
-                    : grid.kind === "media" ? ["mediaStyle", "mediaArtwork"] : ["loginStyle"]
-                readonly property bool selected: designKeys.every(key => root.settings[key] === modelData.values[key])
-                Accessible.checkable: true
-                Accessible.checked: selected
+                Button {
+                    id: preset
+                    anchors.fill: parent
+                    readonly property var modelData: card.modelData
+                    Accessible.name: modelData.name
+                    hoverEnabled: true
+                    ToolTip.text: "Apply " + modelData.name + "."
+                    ToolTip.delay: 500
+                    ToolTip.visible: hovered && !renamePreset.hovered
+                    readonly property bool selected: grid.selectedPreset === grid.presetId(modelData)
+                    Accessible.checkable: true
+                    Accessible.checked: selected
 
-                padding: 8
+                    padding: 8
 
-                background: Rectangle {
-                    radius: 8
-                    antialiasing: true
-                    color: preset.hovered || preset.activeFocus ? Colors.surfaceContainerHighest : Colors.surfaceContainer
-                    border.color: preset.selected || preset.activeFocus ? Colors.primary : Colors.outlineVariant
-                    border.width: preset.selected && grid.kind === "clock" ? 2 : 1
+                    background: Rectangle {
+                        radius: 8
+                        antialiasing: true
+                        color: preset.hovered || preset.activeFocus ? Colors.surfaceContainerHighest : Colors.surfaceContainer
+                        border.color: preset.selected || preset.activeFocus ? Colors.primary : Colors.outlineVariant
+                        border.width: preset.selected && grid.kind === "clock" ? 2 : 1
 
-                    Rectangle {
-                        visible: preset.selected && grid.kind === "clock"
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.margins: 8
-                        width: 18
-                        height: width
-                        radius: width / 2
-                        color: Colors.primary
+                        Rectangle {
+                            visible: preset.selected && grid.kind === "clock"
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.margins: 8
+                            width: 18
+                            height: width
+                            radius: width / 2
+                            color: Colors.primary
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "✓"
-                            color: Colors.overPrimary
-                            font.bold: true
+                            Text {
+                                anchors.centerIn: parent
+                                text: "✓"
+                                color: Colors.overPrimary
+                                font.bold: true
+                            }
                         }
+                    }
+
+                    contentItem: ColumnLayout {
+                        spacing: 4
+
+                        Loader {
+                            id: sample
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            enabled: false
+                            readonly property var settings: Object.assign({}, root.settings, preset.modelData.values)
+                            sourceComponent: grid.kind === "clock" ? clockSample
+                                : grid.kind === "media" ? mediaSample : loginSample
+
+                            Component {
+                                id: clockSample
+
+                                Item {
+                                    LockscreenClock {
+                                        anchors.centerIn: parent
+                                        settings: !preset.modelData.builtin ? sample.settings : Object.assign({}, sample.settings, {
+                                            clockSize: preset.modelData.sampleSize, clockSeconds: false, clockGreeting: false, clockFormat: "24h",
+                                            clockDateRatio: Math.max(23, sample.settings.clockDateRatio)
+                                        })
+                                        live: false
+                                        renderScale: Math.min(parent.width / Math.max(1, designWidth),
+                                                              parent.height / Math.max(1, designHeight))
+                                    }
+                                }
+                            }
+
+                            Component {
+                                id: mediaSample
+
+                                Item {
+                                    LockscreenMedia {
+                                        anchors.centerIn: parent
+                                        settings: sample.settings
+                                        sample: true
+                                        renderScale: Math.max(0.01, Math.min(parent.width / (designWidth * 1.17),
+                                                        parent.height / (designHeight * 1.25)) * Math.min(1.25, (preset.modelData.sampleSize ?? 100) / 100))
+                                    }
+                                }
+                            }
+
+                            Component {
+                                id: loginSample
+
+                                Item {
+                                    LockscreenLogin {
+                                        anchors.centerIn: parent
+                                        settings: sample.settings
+                                        interactive: false
+                                        animate: false
+                                        renderScale: Math.max(0.01, Math.min(parent.width / 465,
+                                                        parent.height / Math.max(130, designHeight * 1.3)) * (preset.modelData.sampleSize ?? 100) / 100)
+                                    }
+                                }
+                            }
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            text: preset.modelData.name
+                            color: preset.selected ? Colors.primary : Colors.overSurface
+                            elide: Text.ElideRight
+                            leftPadding: 20
+                            rightPadding: 20
+                            bottomPadding: grid.kind === "clock" ? 3 : 0
+                        }
+                    }
+
+                    onClicked: {
+                        root.editorPresetApplied(grid.kind, Object.assign({}, grid.widgetValues, modelData.values));
+                        root.edit(Object.assign({}, modelData.values, { [grid.kind + "Preset"]: grid.presetId(modelData) }));
                     }
                 }
 
-                contentItem: ColumnLayout {
-                    spacing: 4
-
-                    Loader {
-                        id: sample
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        enabled: false
-                        readonly property var settings: Object.assign({}, root.settings, preset.modelData.values)
-                        sourceComponent: grid.kind === "clock" ? clockSample
-                            : grid.kind === "media" ? mediaSample : loginSample
-
-                        Component {
-                            id: clockSample
-
-                            Item {
-                                LockscreenClock {
-                                    anchors.centerIn: parent
-                                    settings: Object.assign({}, sample.settings, {
-                                        clockSize: preset.modelData.sampleSize, clockSeconds: false, clockGreeting: false, clockFormat: "24h",
-                                        clockDateRatio: Math.max(23, sample.settings.clockDateRatio)
-                                    })
-                                    live: false
-                                    shadows: false
-                                    scale: Math.min(parent.width / Math.max(1, width),
-                                                    parent.height / Math.max(1, height))
-                                }
-                            }
-                        }
-
-                        Component {
-                            id: mediaSample
-
-                            Item {
-                                LockscreenMedia {
-                                    anchors.centerIn: parent
-                                    settings: sample.settings
-                                    sample: true
-                                    renderScale: Math.max(0.01, Math.min(parent.width / (designWidth * 1.17),
-                                                    parent.height / (designHeight * 1.25)) * Math.min(1.25, preset.modelData.sampleSize / 100))
-                                }
-                            }
-                        }
-
-                        Component {
-                            id: loginSample
-
-                            Item {
-                                LockscreenLogin {
-                                    anchors.centerIn: parent
-                                    settings: sample.settings
-                                    interactive: false
-                                    animate: false
-                                    renderScale: Math.max(0.01, Math.min(parent.width / 465,
-                                                    parent.height / Math.max(130, designHeight * 1.3)) * preset.modelData.sampleSize / 100)
-                                }
-                            }
-                        }
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: preset.modelData.name
-                        color: preset.selected ? Colors.primary : Colors.overSurface
-                        elide: Text.ElideRight
-                        bottomPadding: grid.kind === "clock" ? 3 : 0
-                    }
+                ActionButton {
+                    id: renamePreset
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 4
+                    width: 25
+                    height: 25
+                    bare: true
+                    glyph: Icons.edit
+                    Accessible.name: "Rename " + card.modelData.name
+                    helpText: "Rename this preset."
+                    onClicked: presetNameDialog.begin(card.modelData, grid.catalog)
                 }
-
-                onClicked: root.applyPreset(modelData)
             }
         }
     }
@@ -856,13 +1085,17 @@ Control {
             spacing: 14
 
             Section {
+                id: previewSection
                 title: "Lock screen"
                 visible: !root.editorWidget
                 framed: false
+                readonly property real previewWidth: Math.min(440, Math.round(Math.max(0, width - 32) * 0.8))
 
                 Button {
                     id: previewCard
                     Layout.fillWidth: true
+                    Layout.maximumWidth: previewSection.previewWidth
+                    Layout.alignment: Qt.AlignHCenter
                     readonly property real screenWidth: root.targetScreen?.width || 1440
                     readonly property real screenHeight: root.targetScreen?.height || 900
                     Layout.preferredHeight: Math.max(1, width * screenHeight / screenWidth)
@@ -914,6 +1147,8 @@ Control {
 
                 ActionButton {
                     Layout.fillWidth: true
+                    Layout.maximumWidth: previewSection.previewWidth
+                    Layout.alignment: Qt.AlignHCenter
                     implicitHeight: 36
                     label: "Edit widget layout"
                     glyph: Icons.edit
@@ -933,75 +1168,107 @@ Control {
             Section {
                 title: "Wallpaper"
                 visible: !root.editorWidget
-                headerAction: Component {
-                    ActionButton {
-                        bare: true
-                        glyph: Icons.arrowCounterClockwise
-                        mirrorGlyph: true
-                        Accessible.name: "Refresh wallpapers"
-                        ToolTip.visible: hovered
-                        ToolTip.text: Accessible.name
-                        enabled: !libraryProcess.running
-                        onClicked: root.scan([])
+                contentSpacing: 9
+                customHeader: Component {
+                    RowLayout {
+                        spacing: 8
+
+                        Label {
+                            text: "Wallpaper"
+                            Layout.alignment: Qt.AlignTop
+                            Layout.preferredHeight: 29
+                            verticalAlignment: Text.AlignVCenter
+                            font.pixelSize: Styling.fontSize(wallpaperHeader.compact ? 1 : 4)
+                            font.bold: true
+                            color: Colors.overSurface
+                        }
+
+                        Flow {
+                            id: wallpaperHeader
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignTop
+                            layoutDirection: Qt.RightToLeft
+                            spacing: compact ? 3 : 6
+                            readonly property bool compact: width < 460
+
+                            ActionButton {
+                                bare: true
+                                glyph: Icons.arrowCounterClockwise
+                                mirrorGlyph: true
+                                Accessible.name: "Refresh wallpapers"
+                                helpText: "Rescan the wallpaper folders for new files."
+                                enabled: !libraryProcess.running
+                                onClicked: root.scan([])
+                            }
+
+                            ActionButton {
+                                visible: root.mode === "slideshow" && root.gallery.length > 0
+                                readonly property bool allSelected: root.gallery.every(entry => root.selectedImages.includes(entry.url))
+                                label: wallpaperHeader.compact ? "" : Accessible.name
+                                glyph: wallpaperHeader.compact ? (allSelected ? Icons.minus : Icons.squaresFour) : ""
+                                horizontalPadding: wallpaperHeader.compact ? 4 : 10
+                                Accessible.name: allSelected ? "Clear selection" : "Select all"
+                                helpText: allSelected ? "Deselect all slideshow images." : "Select every image in the gallery for the slideshow."
+                                onClicked: root.setSetting("wallpaperImages", allSelected ? [] : root.gallery.map(entry => entry.url))
+                            }
+
+                            ActionButton {
+                                label: wallpaperHeader.compact ? "" : "Tint"
+                                glyph: wallpaperHeader.compact ? Icons.palette : ""
+                                horizontalPadding: wallpaperHeader.compact ? 4 : 10
+                                Accessible.name: "Wallpaper tint"
+                                helpText: "Tint the wallpaper with your shell theme."
+                                checkable: true
+                                checked: root.settings.wallpaperTint
+                                accent: checked
+                                onToggled: root.setSetting("wallpaperTint", checked)
+                            }
+
+                            ActionButton {
+                                label: wallpaperHeader.compact ? "" : "Use desktop"
+                                glyph: wallpaperHeader.compact ? Icons.image : ""
+                                horizontalPadding: wallpaperHeader.compact ? 4 : 10
+                                Accessible.name: "Use desktop wallpaper"
+                                helpText: "Use your current desktop wallpaper on the lock screen."
+                                enabled: root.settings.wallpaperMode !== "desktop"
+                                onClicked: root.setSetting("wallpaperMode", "desktop")
+                            }
+
+                            ActionButton {
+                                glyph: Icons.folder
+                                horizontalPadding: wallpaperHeader.compact ? 4 : 10
+                                Accessible.name: "Open wallpaper folder"
+                                helpText: "Open the folder used by this gallery."
+                                enabled: !libraryProcess.running && root.libraryError === ""
+                                onClicked: Qt.openUrlExternally(Placement.fileUrl(root.galleryFolder))
+                            }
+
+                            ActionButton {
+                                label: wallpaperHeader.compact ? "" : "Import"
+                                glyph: Icons.plus
+                                horizontalPadding: wallpaperHeader.compact ? 4 : 10
+                                Accessible.name: "Import wallpapers"
+                                helpText: "Choose files to copy into the lock screen wallpaper library."
+                                enabled: !libraryProcess.running
+                                onClicked: fileDialog.open()
+                            }
+
+                            FlatCombo {
+                                width: wallpaperHeader.compact ? 87 : 111
+                                model: root.wallpaperModes.map(option => option[0])
+                                currentIndex: root.wallpaperModes.findIndex(option => option[1] === root.mode)
+                                helpText: "Choose a still image, a slideshow, or a video."
+                                Accessible.name: "Wallpaper type"
+                                onActivated: index => root.setSetting("wallpaperMode", root.wallpaperModes[index][1])
+                            }
+                        }
                     }
                 }
 
-                Flow {
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: 6
-
-                    FlatCombo {
-                        width: 111
-                        model: root.wallpaperModes.map(option => option[0])
-                        currentIndex: root.wallpaperModes.findIndex(option => option[1] === root.mode)
-                        Accessible.name: "Wallpaper type"
-                        onActivated: index => root.setSetting("wallpaperMode", root.wallpaperModes[index][1])
-                    }
-
-                    ActionButton {
-                        label: "Import"
-                        glyph: Icons.plus
-                        Accessible.name: "Import wallpapers"
-                        enabled: !libraryProcess.running
-                        onClicked: fileDialog.open()
-                    }
-
-                    ActionButton {
-                        glyph: Icons.folder
-                        Accessible.name: "Open wallpaper folder"
-                        ToolTip.visible: hovered
-                        ToolTip.text: Accessible.name
-                        enabled: !libraryProcess.running && root.libraryError === ""
-                        onClicked: Qt.openUrlExternally(Placement.fileUrl(root.galleryFolder))
-                    }
-
-                    ActionButton {
-                        label: "Use desktop"
-                        Accessible.name: label
-                        enabled: root.settings.wallpaperMode !== "desktop"
-                        onClicked: root.setSetting("wallpaperMode", "desktop")
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: root.settings.wallpaperMode === "desktop" ? "Using desktop wallpaper"
-                            : root.mode === "slideshow" ? root.selectedImages.length + " selected"
-                            : root.gallery.some(entry => root.isSelected(entry.url)) ? "" : "Choose a wallpaper below"
-                        color: Colors.overSurfaceVariant
-                        wrapMode: Text.WordWrap
-                    }
-
-                    ActionButton {
-                        visible: root.mode === "slideshow" && root.gallery.length > 0
-                        readonly property bool allSelected: root.gallery.every(entry => root.selectedImages.includes(entry.url))
-                        label: allSelected ? "Clear selection" : "Select all"
-                        Accessible.name: label
-                        onClicked: root.setSetting("wallpaperImages", allSelected ? [] : root.gallery.map(entry => entry.url))
-                    }
+                    Layout.preferredHeight: 1
+                    color: Colors.outlineVariant
                 }
 
                 Label {
@@ -1035,6 +1302,13 @@ Control {
                         padding: 0
                         background: null
                         Accessible.name: modelData.name
+                        hoverEnabled: true
+                        ToolTip.text: root.mode === "slideshow"
+                            ? (selected ? "Remove " + modelData.name + " from the slideshow."
+                                        : "Add " + modelData.name + " to the slideshow.")
+                            : "Use " + modelData.name + " as the lock screen wallpaper."
+                        ToolTip.delay: 500
+                        ToolTip.visible: hovered
                         Accessible.checkable: true
                         Accessible.checked: selected
 
@@ -1096,51 +1370,23 @@ Control {
                         model: seconds.map(value => value + " s")
                         currentIndex: seconds.indexOf(root.settings.wallpaperInterval)
                         onActivated: index => root.setSetting("wallpaperInterval", seconds[index])
+                        helpText: "Set how long each slideshow image stays on screen."
                         Accessible.name: "Slideshow interval"
                     }
                 }
 
-                SettingRow {
-                    label: "Wallpaper tint"
-                    ThemeSwitch {
-                        checked: root.settings.wallpaperTint
-                        Accessible.name: "Wallpaper tint"
-                        onToggled: root.setSetting("wallpaperTint", checked)
-                    }
-                }
-
-                SettingRow {
-                    label: "Wallpaper blur (" + Math.round(blurSlider.value) + "%)"
-                    Label {
-                        text: "0%"
-                        color: Colors.overSurfaceVariant
-                    }
-                    Slider {
-                        id: blurSlider
-                        Layout.preferredWidth: Math.min(220, viewport.width * 0.39)
-                        from: 0
-                        to: 100
-                        stepSize: 1
-                        snapMode: Slider.SnapAlways
-                        value: root.settings.wallpaperBlur
-                        onMoved: root.setSetting("wallpaperBlur", Math.round(value))
-                        Accessible.name: "Wallpaper blur"
-                    }
-                    Label {
-                        text: "100%"
-                        Layout.minimumWidth: 36
-                        horizontalAlignment: Text.AlignRight
-                        color: Colors.overSurface
-                    }
-                }
+                WidgetSlider { label: "Wallpaper blur"; key: "wallpaperBlur"; minimum: 0; maximum: 100 }
+                WidgetSlider { label: "Wallpaper dimming"; key: "wallpaperDim"; minimum: 0; maximum: 100 }
             }
 
             Section {
                 id: clockSection
                 title: "Clock"
+                presets: clockPresets
                 visible: root.editorWidget === "clock"
 
                 PresetGrid {
+                    id: clockPresets
                     kind: "clock"
                     options: [
                         { name: "Glance", sampleSize: 112, values: { clockStyle: "inline", clockFont: "", clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 21, clockWeight: "light", clockLetterSpacing: 4 } },
@@ -1164,9 +1410,10 @@ Control {
                     rowSpacing: 4
 
                     ClockGroup {
-                        ClockToggle { label: "Show date"; key: "clockDate" }
-                        ClockToggle {
+                        WidgetToggle { label: "Show date"; helpText: "Display the calendar date beside the time."; key: "clockDate" }
+                        WidgetToggle {
                             label: "Show weekday"
+                            helpText: "Include the day of the week in the clock."
                             key: "clockWeekday"
                             value: root.settings.clockWeekday === "show"
                                 || (root.settings.clockWeekday !== "hide" && root.settings.clockDate)
@@ -1175,8 +1422,8 @@ Control {
                     }
 
                     ClockGroup {
-                        ClockToggle { label: "Show seconds"; key: "clockSeconds" }
-                        ClockToggle { label: "Show greeting"; key: "clockGreeting" }
+                        WidgetToggle { label: "Show seconds"; helpText: "Include seconds in the clock."; key: "clockSeconds" }
+                        WidgetToggle { label: "Show greeting"; helpText: "Show a greeting based on the time of day."; key: "clockGreeting" }
                     }
                 }
 
@@ -1208,6 +1455,7 @@ Control {
                                     delegate: ActionButton {
                                         required property var modelData
                                         label: modelData.label
+                                        helpText: modelData.value === "12h" ? "Use a 12-hour clock." : "Use a 24-hour clock."
                                         horizontalPadding: 6
                                         accent: formatOptions.twelveHour === (modelData.value === "12h")
                                         Accessible.name: modelData.value === "12h" ? "12-hour format" : "24-hour format"
@@ -1219,6 +1467,7 @@ Control {
 
                                 ActionButton {
                                     label: "AM/PM"
+                                    helpText: "Show AM or PM when using the 12-hour clock."
                                     horizontalPadding: 6
                                     enabled: formatOptions.twelveHour
                                     accent: enabled && root.settings.clockAmPm
@@ -1233,21 +1482,21 @@ Control {
                         SettingRow {
                             label: "Font family"
                             FontPicker {
-                                Layout.preferredWidth: Math.min(155, viewport.width * 0.36)
+                                Layout.preferredWidth: formatOptions.implicitWidth
                             }
                         }
 
                         Choice {
                             label: "Font weight"
                             setting: "clockWeight"
+                            controlWidth: formatOptions.implicitWidth
                             options: [["Preset default", "legacy"], ["Light", "light"], ["Regular", "regular"],
                                       ["Medium", "medium"], ["Semibold", "semibold"], ["Bold", "bold"], ["Black", "black"]]
                         }
                     }
 
                     ClockGroup {
-                        ClockSlider { label: "Time proportion"; key: "clockTimeRatio"; minimum: 65; maximum: 140 }
-                        ClockSlider {
+                        WidgetSlider {
                             label: "Date proportion"
                             key: "clockDateRatio"
                             minimum: 5
@@ -1255,32 +1504,67 @@ Control {
                             displayValue: root.settings.clockDateRatio || (root.settings.clockDateSize > 0
                                 ? root.settings.clockDateSize * 100 / Math.max(1, root.settings.clockSize) : 19)
                         }
-                        ClockSlider { label: "Letter spacing"; key: "clockLetterSpacing"; minimum: -10; maximum: 25; unit: "em" }
+                        WidgetSlider { label: "Letter spacing"; key: "clockLetterSpacing"; minimum: -10; maximum: 25; unit: "em" }
                     }
                 }
             }
 
             Section {
                 title: "Media player"
+                presets: mediaPresets
                 visible: root.editorWidget === "media"
                 PresetGrid {
+                    id: mediaPresets
                     kind: "media"
                     options: [
                         { name: "Ambxst", sampleSize: 100, values: { mediaStyle: "bg", mediaArtwork: true } },
                         { name: "Compact", sampleSize: 75, values: { mediaStyle: "compact", mediaArtwork: false } },
-                        { name: "Now playing", sampleSize: 125, values: { mediaStyle: "pane", mediaArtwork: true } },
                         { name: "Cover", sampleSize: 100, values: { mediaStyle: "cover", mediaArtwork: false } },
-                        { name: "Ribbon", sampleSize: 100, values: { mediaStyle: "ribbon", mediaArtwork: false } },
                         { name: "Outline", sampleSize: 100, values: { mediaStyle: "outline", mediaArtwork: false } }
                     ]
                 }
+
+                WidgetSlider {
+                    label: "Background corner radius"
+                    key: "mediaRadius"
+                    minimum: 0
+                    maximum: 70
+                    unit: "px"
+                    displayValue: root.settings.mediaRadius >= 0 ? root.settings.mediaRadius
+                        : ["cover", "outline"].includes(root.settings.mediaStyle) ? 14
+                        : Math.round((root.settings.mediaStyle === "pane" ? 112 : root.settings.mediaStyle === "ribbon" ? 66
+                            : root.settings.mediaStyle === "compact" ? 76 : 96) * Config.roundness / 32)
+                }
+                WidgetSlider {
+                    label: "Thumbnail size"
+                    key: "mediaThumbnailRatio"
+                    minimum: 20
+                    maximum: 100
+                    enabled: !["outline", "ribbon"].includes(root.settings.mediaStyle)
+                    displayValue: root.settings.mediaThumbnailRatio >= 0 ? root.settings.mediaThumbnailRatio
+                        : root.settings.mediaStyle === "cover" ? 95 : root.settings.mediaStyle === "pane" ? 80 : 100
+                }
+                WidgetSlider {
+                    label: "Thumbnail corner radius"
+                    key: "mediaThumbnailRadius"
+                    minimum: 0
+                    maximum: 52
+                    unit: "px"
+                    enabled: !["outline", "ribbon"].includes(root.settings.mediaStyle)
+                    displayValue: root.settings.mediaThumbnailRadius >= 0 ? root.settings.mediaThumbnailRadius
+                        : ["cover", "pane"].includes(root.settings.mediaStyle) ? 12
+                        : Math.round((root.settings.mediaStyle === "compact" ? 44 : 64) * Config.roundness / 32)
+                }
+                WidgetToggle { label: "Blur thumbnail as background"; helpText: "Use blurred album artwork behind the media controls."; key: "mediaArtwork" }
             }
 
             Section {
                 title: "Login"
+                presets: loginPresets
                 visible: root.editorWidget === "login"
 
                 PresetGrid {
+                    id: loginPresets
                     kind: "login"
                     options: [
                         { name: "Ambxst", sampleSize: 100, values: { loginStyle: "bg", loginAvatar: true } },
@@ -1292,13 +1576,21 @@ Control {
                     ]
                 }
 
-                SettingRow {
+                WidgetToggle {
                     label: "Show profile picture"
-                    ThemeSwitch {
-                        checked: root.settings.loginAvatar
-                        onToggled: root.setSetting("loginAvatar", checked)
-                        Accessible.name: "Show profile picture"
-                    }
+                    key: "loginAvatar"
+                    helpText: "Display your profile picture on the login widget."
+                }
+            }
+
+            Section {
+                title: "Appearance"
+                visible: root.editorWidget !== ""
+
+                WidgetToggle {
+                    label: "Drop shadow"
+                    helpText: "Add a soft shadow behind this widget."
+                    key: root.editorWidget + "Shadow"
                 }
             }
 
