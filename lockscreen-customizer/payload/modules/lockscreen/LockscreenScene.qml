@@ -170,6 +170,17 @@ Item {
                 z: 2
                 active: root.customWallpaper
                 readonly property bool ready: item?.ready ?? false
+
+                layer.enabled: ready && root.settings.wallpaperTint
+                layer.effect: ShaderEffect {
+                    property var paletteTexture: tintPalette
+                    property real paletteSize: wallpaperBackground.optimizedPalette.length
+                    property real texWidth: customLoader.width
+                    property real texHeight: customLoader.height
+                    vertexShader: "../widgets/dashboard/wallpapers/palette.vert.qsb"
+                    fragmentShader: "../widgets/dashboard/wallpapers/palette.frag.qsb"
+                }
+
                 sourceComponent: CustomLockWallpaper {
                     settings: root.settings
                     playing: true
@@ -183,7 +194,7 @@ Item {
                 anchors.fill: parent
                 z: 1
                 radius: 0
-                tintEnabled: root.backgroundWallpaper()?.tintEnabled ?? false
+                tintEnabled: root.settings.wallpaperTint
                 source: {
                     if (customLoader.ready || (root.preview && root.customWallpaper))
                         return "";
@@ -200,6 +211,24 @@ Item {
 
             }
 
+        }
+    }
+
+    ShaderEffectSource {
+        id: tintPalette
+        visible: false
+        hideSource: true
+        smooth: false
+        sourceItem: Row {
+            Repeater {
+                model: customLoader.layer.enabled ? wallpaperBackground.optimizedPalette : []
+                delegate: Rectangle {
+                    required property string modelData
+                    width: 1
+                    height: 1
+                    color: Colors[modelData]
+                }
+            }
         }
     }
 

@@ -1101,6 +1101,15 @@ Control {
                 }
 
                 SettingRow {
+                    label: "Wallpaper tint"
+                    ThemeSwitch {
+                        checked: root.settings.wallpaperTint
+                        Accessible.name: "Wallpaper tint"
+                        onToggled: root.setSetting("wallpaperTint", checked)
+                    }
+                }
+
+                SettingRow {
                     label: "Wallpaper blur (" + Math.round(blurSlider.value) + "%)"
                     Label {
                         text: "0%"

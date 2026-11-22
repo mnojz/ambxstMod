@@ -39,7 +39,7 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
              root.pauseAutoSave = true;
              reload();
              root.pauseAutoSave = false;
-@@ -947,12 +963,116 @@
+@@ -947,12 +963,117 @@
          onPathChanged: reload()
          onAdapterUpdated: {
              if (root.lockscreenReady && !root.pauseAutoSave) {
@@ -56,6 +56,7 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
 +            property string wallpaperVideo: ""
 +            property int wallpaperInterval: 30
 +            property int wallpaperBlur: 0
++            property bool wallpaperTint: false
 +            property string clockStyle: "offset"
 +            property string clockFont: "League Gothic"
 +            property int clockSize: 240
@@ -161,7 +162,7 @@ diff --git a/config/defaults/lockscreen.js b/config/defaults/lockscreen.js
 index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b7139891d66491 100644
 --- a/config/defaults/lockscreen.js
 +++ b/config/defaults/lockscreen.js
-@@ -1,5 +1,44 @@
+@@ -1,5 +1,45 @@
  .pragma library
  
  var data = {
@@ -173,6 +174,7 @@ index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b71398
 +    "wallpaperVideo": "",
 +    "wallpaperInterval": 30,
 +    "wallpaperBlur": 0,
++    "wallpaperTint": false,
 +    "clockStyle": "offset",
 +    "clockFont": "League Gothic",
 +    "clockSize": 240,
