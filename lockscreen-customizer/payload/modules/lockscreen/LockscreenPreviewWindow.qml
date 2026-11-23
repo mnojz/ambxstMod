@@ -30,7 +30,7 @@ PanelWindow {
             return;
         const baselines = {};
         const stored = Array.from(settings.widgetPresetBaselines ?? []);
-        for (const widget of ["clock", "media", "login"]) {
+        for (const widget of ["clock", "media", "login", "visualizer"]) {
             const values = stored.find(entry => entry?.widget === widget)?.values ?? settings;
             baselines[widget] = Presets.valuesFor(widget, values, Defaults.data);
         }
@@ -42,6 +42,11 @@ PanelWindow {
         : Qt.rect(0, 0, 0, 0)
 
     onInspectedBoundsChanged: {
+        if (inspectorHandle?.moving)
+            repositionInspector();
+    }
+
+    function repositionInspector() {
         if (inspectorHandle && overlapsInspector(inspectedBounds, inspectorOnRight)
                 && !overlapsInspector(inspectedBounds, !inspectorOnRight))
             inspectorOnRight = !inspectorOnRight;
@@ -148,6 +153,11 @@ PanelWindow {
             onSelectedWidgetChanged: {
                 if (root.inspectorWidget && root.inspectorWidget !== selectedWidget)
                     root.closeInspector();
+            }
+
+            onWidgetInteracted: handle => {
+                if (root.inspectorHandle === handle)
+                    root.repositionInspector();
             }
 
             onToolsRequested: (key, handle) => {

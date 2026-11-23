@@ -369,6 +369,7 @@ Control {
         ToolTip.visible: hovered && helpText !== ""
         property string label: ""
         property string glyph: ""
+        property color swatchColor: "transparent"
         property bool bare: false
         property bool mirrorGlyph: false
         property bool accent: false
@@ -411,6 +412,17 @@ Control {
                     font.family: Icons.font
                     font.pixelSize: Styling.fontSize(1)
                     color: actionLabel.foreground
+                }
+
+                Rectangle {
+                    visible: action.swatchColor.a > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 16
+                    height: width
+                    radius: 4
+                    color: action.swatchColor
+                    border.color: Qt.alpha(actionLabel.foreground, 0.55)
+                    antialiasing: true
                 }
 
                 Label {
@@ -757,6 +769,158 @@ Control {
     }
 
     Basic.Popup {
+        id: visualizerColorPicker
+        property real hue: 0
+        property real saturation: 0
+        property real lightness: 1
+        readonly property color draftColor: Qt.hsla(hue, saturation, lightness, 1)
+
+        function openFor(initialColor: color) {
+            hue = Math.max(0, initialColor.hslHue);
+            saturation = initialColor.hslSaturation;
+            lightness = initialColor.hslLightness;
+            open();
+        }
+
+        function trackColor(channel, value) {
+            switch (channel) {
+            case "hue": return Qt.hsla(value, 1, 0.5, 1);
+            case "saturation": return Qt.hsla(hue, value, lightness, 1);
+            default: return Qt.hsla(hue, saturation, value, 1);
+            }
+        }
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(320, (parent?.width ?? root.width) - 24)
+        modal: true
+        focus: true
+        padding: 14
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: Colors.surfaceContainerHigh
+            border.color: Colors.outlineVariant
+            radius: 10
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 8
+
+            Label {
+                text: "Visualizer color"
+                color: Colors.overSurface
+                font.bold: true
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 56
+                radius: 8
+                color: visualizerColorPicker.draftColor
+
+                Label {
+                    anchors.centerIn: parent
+                    text: parent.color.toString().toUpperCase()
+                    font.bold: true
+                    font.pixelSize: Styling.fontSize(3)
+                    color: (0.2126 * parent.color.r + 0.7152 * parent.color.g + 0.0722 * parent.color.b) > 0.56
+                        ? "black" : "white"
+                }
+            }
+
+            Repeater {
+                model: [
+                    { label: "Hue", key: "hue", maximum: 360, unit: "°" },
+                    { label: "Saturation", key: "saturation", maximum: 100, unit: "%" },
+                    { label: "Lightness", key: "lightness", maximum: 100, unit: "%" }
+                ]
+                delegate: ColumnLayout {
+                    id: channel
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            Layout.fillWidth: true
+                            text: channel.modelData.label
+                            color: Colors.overSurface
+                        }
+                        Label {
+                            text: Math.round(hslSlider.value * channel.modelData.maximum) + channel.modelData.unit
+                            color: Colors.overSurfaceVariant
+                        }
+                    }
+
+                    Basic.Slider {
+                        id: hslSlider
+                        Layout.fillWidth: true
+                        implicitHeight: 24
+                        from: 0
+                        to: 1
+                        stepSize: 1 / channel.modelData.maximum
+                        value: visualizerColorPicker[channel.modelData.key]
+                        Accessible.name: channel.modelData.label
+                        onMoved: visualizerColorPicker[channel.modelData.key] = value
+
+                        background: Rectangle {
+                            x: hslSlider.leftPadding
+                            y: (hslSlider.height - height) / 2
+                            width: hslSlider.availableWidth
+                            height: 14
+                            radius: height / 2
+                            antialiasing: true
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                                GradientStop { position: 1 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                                GradientStop { position: 2 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                                GradientStop { position: 3 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                                GradientStop { position: 4 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                                GradientStop { position: 5 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                                GradientStop { position: 1; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                            }
+                        }
+
+                        handle: Rectangle {
+                            x: hslSlider.leftPadding + hslSlider.visualPosition * (hslSlider.availableWidth - width)
+                            y: (hslSlider.height - height) / 2
+                            width: 20
+                            height: width
+                            radius: width / 2
+                            border.width: hslSlider.visualFocus ? 3 : 2
+                            border.color: "white"
+                            color: visualizerColorPicker.trackColor(channel.modelData.key, hslSlider.value)
+                            antialiasing: true
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+
+                ActionButton {
+                    label: "Cancel"
+                    helpText: "Close without changing the color."
+                    onClicked: visualizerColorPicker.close()
+                }
+                ActionButton {
+                    label: "Use color"
+                    helpText: "Apply this custom color to the visualizer."
+                    onClicked: {
+                        root.edit({ visualizerUseShellColors: false,
+                                    visualizerColor: visualizerColorPicker.draftColor.toString() });
+                        visualizerColorPicker.close();
+                    }
+                }
+            }
+        }
+    }
+
+    Basic.Popup {
         id: presetNameDialog
 
         property var targetPreset: null
@@ -982,7 +1146,8 @@ Control {
                             enabled: false
                             readonly property var settings: Object.assign({}, root.settings, preset.modelData.values)
                             sourceComponent: grid.kind === "clock" ? clockSample
-                                : grid.kind === "media" ? mediaSample : loginSample
+                                : grid.kind === "media" ? mediaSample
+                                : grid.kind === "visualizer" ? visualizerSample : loginSample
 
                             Component {
                                 id: clockSample
@@ -1011,6 +1176,19 @@ Control {
                                         sample: true
                                         renderScale: Math.max(0.01, Math.min(parent.width / (designWidth * 1.17),
                                                         parent.height / (designHeight * 1.25)) * Math.min(1.25, (preset.modelData.sampleSize ?? 100) / 100))
+                                    }
+                                }
+                            }
+
+                            Component {
+                                id: visualizerSample
+
+                                Item {
+                                    LockscreenVisualizer {
+                                        anchors.fill: parent
+                                        anchors.margins: 8
+                                        settings: sample.settings
+                                        sample: true
                                     }
                                 }
                             }
@@ -1580,6 +1758,51 @@ Control {
                     label: "Show profile picture"
                     key: "loginAvatar"
                     helpText: "Display your profile picture on the login widget."
+                }
+            }
+
+            Section {
+                title: "Audio visualizer"
+                presets: visualizerPresets
+                visible: root.editorWidget === "visualizer"
+
+                PresetGrid {
+                    id: visualizerPresets
+                    kind: "visualizer"
+                    options: [
+                        { name: "Gradient wave", values: { visualizerStyle: "wave" } },
+                        { name: "Rounded bars", values: { visualizerStyle: "bars" } },
+                        { name: "Mirrored bars", values: { visualizerStyle: "mirror" } },
+                        { name: "Ripple ring", values: { visualizerStyle: "ring" } },
+                        { name: "Spectrum dots", values: { visualizerStyle: "dots" } }
+                    ]
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    uniformCellSizes: true
+                    spacing: 8
+
+                    ActionButton {
+                        Layout.fillWidth: true
+                        label: "Use shell colors"
+                        helpText: "Follow the shell theme’s primary color."
+                        accent: root.settings.visualizerUseShellColors
+                        Accessible.checkable: true
+                        Accessible.checked: accent
+                        onClicked: root.setSetting("visualizerUseShellColors", true)
+                    }
+
+                    ActionButton {
+                        Layout.fillWidth: true
+                        label: "Custom color"
+                        swatchColor: root.settings.visualizerColor
+                        accent: !root.settings.visualizerUseShellColors
+                        Accessible.checkable: true
+                        Accessible.checked: accent
+                        helpText: "Choose a color for this visualizer."
+                        onClicked: visualizerColorPicker.openFor(root.settings.visualizerColor)
+                    }
                 }
             }
 

@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "id": "mnojz.lockscreen-customizer",
   "name": "Lock Screen Customizer",
-  "version": "1.7.10",
-  "description": "Adds a dedicated Ambxst Settings tab for lock screen wallpapers, clock, media player, and login appearance.",
+  "version": "1.10.0",
+  "description": "Adds lock screen customization for wallpapers, clock, media player, login, and an audio visualizer.",
   "author": "mnojz",
   "compatibility": {
     "api": 1,
@@ -17,6 +17,7 @@
   "permissions": [
     "Scans the desktop and lock screen wallpaper folders and copies selected imports to the lock screen wallpaper library.",
     "Uses FFmpeg when available to generate video thumbnails.",
+    "Analyzes the default playback monitor locally while a live audio visualizer is shown.",
     "Saves appearance and layout settings in the user’s lockscreen-customizer.json, independently of shell presets.",
     "Runs the power or display action you confirm from a configured button on the lock screen."
   ],
@@ -110,6 +111,16 @@
       "type": "overlay",
       "source": "payload/modules/lockscreen/CustomizedLockScreen.qml",
       "target": "modules/lockscreen/CustomizedLockScreen.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/LockscreenVisualizer.qml",
+      "target": "modules/lockscreen/LockscreenVisualizer.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/scripts/lockscreen_spectrum.py",
+      "target": "scripts/lockscreen_spectrum.py"
     },
     {
       "type": "patch",

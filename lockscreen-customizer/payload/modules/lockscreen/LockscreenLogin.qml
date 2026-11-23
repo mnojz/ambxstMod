@@ -209,11 +209,15 @@ Item {
                     TextField {
                         id: passwordInput
                         Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
+                        Layout.fillHeight: true
+                        leftPadding: login.px(6)
+                        rightPadding: login.px(6)
+                        topPadding: 0
+                        bottomPadding: 0
                         placeholderText: login.username
                         placeholderTextColor: Qt.rgba(passwordFieldBg.item.r, passwordFieldBg.item.g, passwordFieldBg.item.b, 0.5)
                         font.family: Config.theme.font
-                        font.pixelSize: Math.max(1, Math.round(login.px(Styling.fontSize(0))))
+                        font.pixelSize: Math.max(1, Math.round(login.px(Styling.fontSize(length || preeditText ? 0 : 1))))
                         renderType: TextInput.NativeRendering
                         color: passwordFieldBg.item
                         background: null

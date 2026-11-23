@@ -39,7 +39,7 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
              root.pauseAutoSave = true;
              reload();
              root.pauseAutoSave = false;
-@@ -947,12 +963,129 @@
+@@ -947,12 +963,139 @@
          onPathChanged: reload()
          onAdapterUpdated: {
              if (root.lockscreenReady && !root.pauseAutoSave) {
@@ -100,6 +100,16 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
 +            property string mediaPreset: ""
 +            property string loginPreset: ""
 +            property list<var> widgetPresets: []
++            property bool visualizerVisible: false
++            property real visualizerX: 0.5
++            property real visualizerY: 0.78
++            property real visualizerWidth: 0.46
++            property real visualizerHeight: 0.15
++            property string visualizerStyle: "wave"
++            property bool visualizerUseShellColors: true
++            property string visualizerColor: "#91baff"
++            property bool visualizerShadow: false
++            property string visualizerPreset: ""
 +            property list<var> widgetPresetBaselines: []
 +            property list<var> shortcuts: []
 +        }
@@ -174,7 +184,7 @@ diff --git a/config/defaults/lockscreen.js b/config/defaults/lockscreen.js
 index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b7139891d66491 100644
 --- a/config/defaults/lockscreen.js
 +++ b/config/defaults/lockscreen.js
-@@ -1,5 +1,57 @@
+@@ -1,5 +1,67 @@
  .pragma library
  
  var data = {
@@ -230,6 +240,16 @@ index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b71398
 +    "mediaPreset": "",
 +    "loginPreset": "",
 +    "widgetPresets": [],
++    "visualizerVisible": false,
++    "visualizerX": 0.5,
++    "visualizerY": 0.78,
++    "visualizerWidth": 0.46,
++    "visualizerHeight": 0.15,
++    "visualizerStyle": "wave",
++    "visualizerUseShellColors": true,
++    "visualizerColor": "#91baff",
++    "visualizerShadow": false,
++    "visualizerPreset": "",
 +    "widgetPresetBaselines": [],
 +    "shortcuts": []
  }

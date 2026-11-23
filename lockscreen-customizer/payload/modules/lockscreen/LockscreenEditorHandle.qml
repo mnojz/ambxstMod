@@ -13,9 +13,10 @@ Item {
     property real guideX: -1
     property real guideY: -1
     property bool toolsAvailable: true
+    property bool freeResize: false
     signal toolsRequested()
     signal select()
-    signal done(real x, real y, real width)
+    signal done(real x, real y, real width, real height)
 
     property rect original
     property rect draft
@@ -54,6 +55,14 @@ Item {
     function resize(dx, dy, grip) {
         const signX = grip < 4 ? (grip % 2 === 0 ? -1 : 1) : grip === 6 ? -1 : grip === 7 ? 1 : 0;
         const signY = grip < 4 ? (grip < 2 ? -1 : 1) : grip === 4 ? -1 : grip === 5 ? 1 : 0;
+        if (freeResize) {
+            const horizontal = resizeAxis(original.x, original.width, parent.width, dx, signX, true);
+            const vertical = resizeAxis(original.y, original.height, parent.height, dy, signY, false);
+            guideX = horizontal.guide;
+            guideY = vertical.guide;
+            draft = Qt.rect(horizontal.start, vertical.start, horizontal.length, vertical.length);
+            return;
+        }
         const centerX = original.x + original.width / 2;
         const centerY = original.y + original.height / 2;
         const anchorX = centerX - signX * original.width / 2;
@@ -91,11 +100,24 @@ Item {
         draft = Qt.rect(anchorX - (1 - signX) * width / 2, anchorY - (1 - signY) * height / 2, width, height);
     }
 
+    function resizeAxis(start, length, available, delta, side, horizontal) {
+        if (side === 0)
+            return { start, length, guide: -1 };
+
+        const anchor = side < 0 ? start + length : start;
+        const minLength = Math.min(36, side < 0 ? anchor : available - anchor);
+        const minimum = side < 0 ? 0 : anchor + minLength;
+        const maximum = side < 0 ? anchor - minLength : available;
+        const edge = Math.max(minimum, Math.min(maximum, start + (side > 0 ? length : 0) + delta));
+        const snapped = Placement.snap(edge, [0], Placement.alignmentGuides(available, siblings, horizontal), minimum, maximum);
+        return { start: Math.min(anchor, snapped.position), length: Math.abs(anchor - snapped.position), guide: snapped.guide };
+    }
+
     function finish() {
         if (!moving)
             return;
         if (draft !== original)
-            done(x, y, width);
+            done(x, y, width, height);
         moving = false;
     }
 

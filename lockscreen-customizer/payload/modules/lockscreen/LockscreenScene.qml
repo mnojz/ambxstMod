@@ -27,6 +27,7 @@ Item {
         { key: "clock", title: "Clock" },
         { key: "media", title: "Media player" },
         { key: "login", title: "Login" },
+        { key: "visualizer", title: "Audio visualizer" },
         ...Actions.available.map(action => ({ key: "shortcut:" + action.id, title: action.label }))
     ]
     signal passwordSubmitted(string password)
@@ -34,6 +35,7 @@ Item {
     signal dismiss()
     signal layoutEdited(var values)
     signal toolsRequested(string key, Item handle)
+    signal widgetInteracted(Item handle)
     signal contextMenuRequested(point position, string key)
 
     function hasWidget(key) {
@@ -89,7 +91,16 @@ Item {
         layoutEdited({ shortcuts: next });
     }
 
-    function placeWidget(key, widget, x, y, requestedWidth) {
+    function placeWidget(key, widget, x, y, requestedWidth, requestedHeight) {
+        if (key === "visualizer") {
+            layoutEdited({
+                visualizerWidth: Math.min(1, requestedWidth / Math.max(1, width)),
+                visualizerHeight: Math.min(1, requestedHeight / Math.max(1, height)),
+                visualizerX: x / Math.max(1, width - requestedWidth),
+                visualizerY: y / Math.max(1, height - requestedHeight)
+            });
+            return;
+        }
         if (key.startsWith("shortcut:")) {
             placeShortcut(key.slice(9), widget, x, y, requestedWidth);
             return;
@@ -137,18 +148,19 @@ Item {
         }
         clip: true
         readonly property real blurAmount: Math.max(0, Math.min(100, root.settings.wallpaperBlur)) / 100
-        readonly property real sampleSpacing: blurAmount * 5 * root.designScale
-        readonly property size previewTextureSize: root.miniature
-            ? Qt.size(Math.max(1, Math.ceil(width * (Screen.devicePixelRatio || 1))),
-                      Math.max(1, Math.ceil(height * (Screen.devicePixelRatio || 1))))
-            : Qt.size(0, 0)
+        readonly property real blurSigma: 15 * blurAmount * root.designScale
+        // As the blur broadens, the blurred image needs fewer pixels to retain its detail.
+        readonly property real textureScale: Math.min(Screen.devicePixelRatio || 1, 8 / Math.max(1, blurSigma))
+        readonly property size blurTextureSize: Qt.size(Math.max(1, Math.round(width * textureScale)),
+                                                         Math.max(1, Math.round(height * textureScale)))
 
-        layer.enabled: sampleSpacing > 0
+        layer.enabled: blurSigma > 0
         layer.smooth: true
-        layer.textureSize: previewTextureSize
+        layer.textureSize: blurTextureSize
         layer.effect: ShaderEffect {
             property var source
-            readonly property vector2d texelStep: Qt.vector2d(0, backgroundLayer.sampleSpacing / Math.max(1, height))
+            readonly property vector2d texelStep: Qt.vector2d(0, 1 / backgroundLayer.blurTextureSize.height)
+            readonly property real sigma: backgroundLayer.blurSigma * backgroundLayer.blurTextureSize.height / Math.max(1, height)
             fragmentShader: "wallpaper-gaussian.frag.qsb"
         }
 
@@ -157,10 +169,11 @@ Item {
             clip: true
             layer.enabled: backgroundLayer.layer.enabled
             layer.smooth: true
-            layer.textureSize: backgroundLayer.previewTextureSize
+            layer.textureSize: backgroundLayer.blurTextureSize
             layer.effect: ShaderEffect {
                 property var source
-                readonly property vector2d texelStep: Qt.vector2d(backgroundLayer.sampleSpacing / Math.max(1, width), 0)
+                readonly property vector2d texelStep: Qt.vector2d(1 / backgroundLayer.blurTextureSize.width, 0)
+                readonly property real sigma: backgroundLayer.blurSigma * backgroundLayer.blurTextureSize.width / Math.max(1, width)
                 fragmentShader: "wallpaper-gaussian.frag.qsb"
             }
 
@@ -276,6 +289,26 @@ Item {
             if (diff > 1500)
                 wallpaperBackground.videoSeek(wp.activeVideo.positionMs);
         }
+    }
+
+    LockscreenVisualizer {
+        id: visualizer
+        settings: root.settings
+        visible: root.settings.visualizerVisible
+        captureAudio: !root.miniature
+        sample: root.miniature
+        pixelScale: Math.max(0.01, root.designScale)
+        readonly property real baseWidth: Math.max(0, Math.min(root.width, root.width * root.settings.visualizerWidth))
+        readonly property real baseHeight: Math.max(0, Math.min(root.height, root.height * root.settings.visualizerHeight))
+        readonly property real baseScale: 1
+        readonly property real baseX: root.coordinate(root.settings.visualizerX, "center", root.width, baseWidth)
+        readonly property real baseY: root.coordinate(root.settings.visualizerY, "bottom", root.height, baseHeight)
+        readonly property rect bounds: root.visualBounds(visualizer)
+        x: bounds.x
+        y: bounds.y
+        width: bounds.width
+        height: bounds.height
+        z: root.activeEditHandle?.widget === visualizer ? 12 : 9
     }
 
     LockscreenClock {
@@ -437,7 +470,8 @@ Item {
             readonly property var widgets: root.widgetOptions.map(option => {
                 const widget = option.key === "clock" ? clockContainer
                     : option.key === "media" ? playerContainer
-                    : option.key === "login" ? passwordContainer : root.shortcutWidgets[option.key.slice(9)];
+                    : option.key === "login" ? passwordContainer
+                    : option.key === "visualizer" ? visualizer : root.shortcutWidgets[option.key.slice(9)];
                 return { key: option.key, title: option.title, widget };
             }).filter(entry => entry.widget)
 
@@ -487,7 +521,10 @@ Item {
                     selected: root.selectedWidget === modelData.key
                     z: selected ? 1 : 0
                     toolsAvailable: !modelData.key.startsWith("shortcut:")
-                    onSelect: root.selectedWidget = modelData.key
+                    onSelect: {
+                        root.selectedWidget = modelData.key;
+                        root.widgetInteracted(handle);
+                    }
                     onToolsRequested: root.toolsRequested(modelData.key, handle)
                     onMovingChanged: {
                         if (moving)
@@ -495,7 +532,8 @@ Item {
                         else if (root.activeEditHandle === handle)
                             root.activeEditHandle = null;
                     }
-                    onDone: (x, y, width) => root.placeWidget(modelData.key, widget, x, y, width)
+                    freeResize: modelData.key === "visualizer"
+                    onDone: (x, y, width, height) => root.placeWidget(modelData.key, widget, x, y, width, height)
                 }
             }
         }

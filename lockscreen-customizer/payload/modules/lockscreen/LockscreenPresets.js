@@ -8,7 +8,9 @@ const fields = {
             "clockLetterSpacing", "clockAmPm", "clockTimeRatio", "clockDateRatio", "clockShadow"],
     media: ["mediaPosition", "mediaScale", "mediaX", "mediaY", "mediaStyle",
             "mediaArtwork", "mediaShadow", "mediaRadius", "mediaThumbnailRatio", "mediaThumbnailRadius"],
-    login: ["loginPosition", "loginScale", "loginX", "loginY", "loginAvatar", "loginStyle", "loginShadow"]
+    login: ["loginPosition", "loginScale", "loginX", "loginY", "loginAvatar", "loginStyle", "loginShadow"],
+    visualizer: ["visualizerX", "visualizerY", "visualizerWidth", "visualizerHeight", "visualizerStyle",
+                 "visualizerUseShellColors", "visualizerColor", "visualizerShadow"]
 };
 
 function valuesFor(widget, settings, defaults) {
