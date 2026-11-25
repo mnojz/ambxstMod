@@ -21,7 +21,12 @@ PanelWindow {
     property url videoPoster
     property bool closing: false
     property string inspectorWidget: ""
+    property string inspectorPart: ""
+    property string partGuideAxis: ""
     property bool inspectorOnRight: false
+    property bool inspectorDragging: false
+    property real inspectorDragStart: 0
+    property real inspectorDragX: 0
     property Item inspectorHandle
     property var presetBaselines: ({})
 
@@ -47,7 +52,7 @@ PanelWindow {
     }
 
     function repositionInspector() {
-        if (inspectorHandle && overlapsInspector(inspectedBounds, inspectorOnRight)
+        if (!inspectorDragging && inspectorHandle && overlapsInspector(inspectedBounds, inspectorOnRight)
                 && !overlapsInspector(inspectedBounds, !inspectorOnRight))
             inspectorOnRight = !inspectorOnRight;
     }
@@ -109,9 +114,20 @@ PanelWindow {
     }
 
     function closeInspector() {
+        inspectorDragging = false;
         inspectorWidget = "";
+        inspectorPart = "";
+        partGuideAxis = "";
         inspectorHandle = null;
         scene.forceActiveFocus();
+    }
+
+    function showInspector(key, handle, part = "") {
+        inspectorOnRight = handle.x + handle.width / 2 < scene.width / 2;
+        inspectorPart = part;
+        inspectorWidget = key;
+        inspectorHandle = handle;
+        inspector.item?.forceActiveFocus();
     }
 
     Timer {
@@ -146,6 +162,8 @@ PanelWindow {
             screen: root.screen
             preview: true
             editing: root.editing
+            selectedPart: root.inspectorPart
+            partGuideAxis: root.partGuideAxis
             settings: root.settings
             videoPoster: root.videoPoster
             onLayoutEdited: values => root.editLayout(values)
@@ -160,15 +178,23 @@ PanelWindow {
                     root.repositionInspector();
             }
 
-            onToolsRequested: (key, handle) => {
-                if (root.inspectorWidget === key) {
-                    root.closeInspector();
+            onPartSelected: (key, part, handle) => {
+                if (key === "visualizer") {
+                    root.showInspector(key, handle);
+                    inspector.item?.openAppearance();
+                } else if (root.inspectorWidget === key) {
+                    root.inspectorPart = part;
+                    inspector.item?.openParts();
                 } else {
-                    root.inspectorOnRight = handle.x + handle.width / 2 < scene.width / 2;
-                    root.inspectorWidget = key;
-                    root.inspectorHandle = handle;
-                    inspector.item?.forceActiveFocus();
+                    root.showInspector(key, handle, part);
                 }
+            }
+
+            onToolsRequested: (key, handle) => {
+                if (root.inspectorWidget === key)
+                    root.closeInspector();
+                else
+                    root.showInspector(key, handle);
             }
 
             onContextMenuRequested: (position, key) => {
@@ -333,13 +359,26 @@ PanelWindow {
         Loader {
             id: inspector
             active: root.editing && root.inspectorWidget !== ""
-            x: root.inspectorOnRight ? parent.width - width - 12 : 12
-            y: toolbar.y + toolbar.height + 12
+            x: root.inspectorDragging ? root.inspectorDragX
+                : root.inspectorOnRight ? parent.width - width - 12 : 12
+
+            Behavior on x {
+                enabled: inspector.active && !root.inspectorDragging && Config.animDuration > 0
+                NumberAnimation {
+                    duration: 220
+                    easing.type: Easing.OutCubic
+                }
+            }
+            readonly property real topMargin: toolbar.y + toolbar.height + 12
+            readonly property real availableHeight: Math.max(0, parent.height - topMargin - 12)
+            y: topMargin + (availableHeight - height) / 2
             width: Math.min(390, Math.max(0, parent.width - 24))
-            height: Math.max(0, parent.height - y - 12)
+            height: Math.round(availableHeight * 0.8)
             z: 119
 
             sourceComponent: FocusScope {
+                function openParts() { widgetSettings.showEditorPage("parts"); }
+                function openAppearance() { widgetSettings.showEditorPage("appearance"); }
                 Keys.onEscapePressed: root.closeInspector()
 
                 Rectangle {
@@ -366,11 +405,46 @@ PanelWindow {
                         Layout.rightMargin: 6
                         Layout.topMargin: 6
 
-                        Label {
+                        Item {
                             Layout.fillWidth: true
-                            text: root.inspectorHandle?.title ?? "Widget tools"
-                            font.bold: true
-                            color: Colors.overSurface
+                            Layout.preferredHeight: 30
+
+                            RowLayout {
+                                anchors.fill: parent
+                                Text {
+                                    text: Icons.dotsNine
+                                    color: Colors.overSurfaceVariant
+                                    font.family: Icons.font
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: root.inspectorHandle?.title ?? "Widget tools"
+                                    font.bold: true
+                                    color: Colors.overSurface
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            HoverHandler { cursorShape: root.inspectorDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor }
+                            DragHandler {
+                                target: null
+                                yAxis.enabled: false
+                                onActiveChanged: {
+                                    if (active) {
+                                        root.inspectorDragStart = inspector.x;
+                                        root.inspectorDragX = inspector.x;
+                                        root.inspectorDragging = true;
+                                    } else if (root.inspectorDragging) {
+                                        root.inspectorOnRight = root.inspectorDragX + inspector.width / 2 >= slide.width / 2;
+                                        root.inspectorDragging = false;
+                                    }
+                                }
+                                onActiveTranslationChanged: {
+                                    if (active)
+                                        root.inspectorDragX = Math.max(12, Math.min(slide.width - inspector.width - 12,
+                                            root.inspectorDragStart + activeTranslation.x));
+                                }
+                            }
                         }
 
                         EditorButton {
@@ -388,10 +462,15 @@ PanelWindow {
                     }
 
                     LockscreenPanel {
+                        id: widgetSettings
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         editorWidget: root.inspectorWidget
                         editorSettings: root.settings
+                        editorPart: root.inspectorPart
+                        editorTarget: root.inspectorHandle?.widget ?? null
+                        onEditorPartGuideChanged: axis => root.partGuideAxis = axis
+                        onEditorPartSelected: part => root.inspectorPart = part
                         editorPresetBaseline: root.presetBaselines[editorWidget] ?? root.settings
                         onEditorPresetApplied: (widget, values) => {
                             root.presetBaselines = Object.assign({}, root.presetBaselines, { [widget]: values });

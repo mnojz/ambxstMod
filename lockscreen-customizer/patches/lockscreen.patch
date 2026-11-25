@@ -39,7 +39,7 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
              root.pauseAutoSave = true;
              reload();
              root.pauseAutoSave = false;
-@@ -947,12 +963,139 @@
+@@ -947,12 +963,156 @@
          onPathChanged: reload()
          onAdapterUpdated: {
              if (root.lockscreenReady && !root.pauseAutoSave) {
@@ -110,6 +110,23 @@ index 36df7905edf70c9c8ea063a6d34b24354a0e13df..6277d58bf1f142e39ceef7a790b73c21
 +            property string visualizerColor: "#91baff"
 +            property bool visualizerShadow: false
 +            property string visualizerPreset: ""
++            property string clockPartStyles: "{}"
++            property string clockAnchor: "{}"
++            property string mediaPartStyles: "{}"
++            property string mediaAnchor: "{}"
++            property string loginPartStyles: "{}"
++            property string loginAnchor: "{}"
++            property string visualizerPartStyles: "{}"
++            property string visualizerAnchor: "{}"
++            property string clockAppearance: "{}"
++            property string loginAppearance: "{}"
++            property string mediaAppearance: "{}"
++            property string clockFrame: "{}"
++            property string loginFrame: "{}"
++            property string mediaFrame: "{}"
++            property string visualizerAppearance: "{}"
++            property string loginArrangement: "preset"
++            property string mediaLayoutOptions: "{}"
 +            property list<var> widgetPresetBaselines: []
 +            property list<var> shortcuts: []
 +        }
@@ -184,7 +201,7 @@ diff --git a/config/defaults/lockscreen.js b/config/defaults/lockscreen.js
 index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b7139891d66491 100644
 --- a/config/defaults/lockscreen.js
 +++ b/config/defaults/lockscreen.js
-@@ -1,5 +1,67 @@
+@@ -1,5 +1,84 @@
  .pragma library
  
  var data = {
@@ -250,6 +267,23 @@ index b06cbea97f9bf227a462b58d0358ff307d306db3..1499e442e89fa1510ceddd5a63b71398
 +    "visualizerColor": "#91baff",
 +    "visualizerShadow": false,
 +    "visualizerPreset": "",
++    "clockPartStyles": "{}",
++    "clockAnchor": "{}",
++    "mediaPartStyles": "{}",
++    "mediaAnchor": "{}",
++    "loginPartStyles": "{}",
++    "loginAnchor": "{}",
++    "visualizerPartStyles": "{}",
++    "visualizerAnchor": "{}",
++    "clockAppearance": "{}",
++    "loginAppearance": "{}",
++    "mediaAppearance": "{}",
++    "clockFrame": "{}",
++    "loginFrame": "{}",
++    "mediaFrame": "{}",
++    "visualizerAppearance": "{}",
++    "loginArrangement": "preset",
++    "mediaLayoutOptions": "{}",
 +    "widgetPresetBaselines": [],
 +    "shortcuts": []
  }

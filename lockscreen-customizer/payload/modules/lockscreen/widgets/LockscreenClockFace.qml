@@ -4,6 +4,7 @@ import QtQuick
 import qs.config
 import qs.modules.services
 import qs.modules.theme
+import "../LockscreenCustomization.js" as Customization
 
 Item {
     id: clock
@@ -11,6 +12,13 @@ Item {
     required property var settings
     property real designScale: 1
     required property date currentTime
+    readonly property var partStyles: Customization.read(settings.clockPartStyles)
+    readonly property var editableParts: ({ hours: hoursText, minutes: minutesText,
+        suffix: suffixText, date: dateText, greeting: greeting, dial: dial })
+
+    function partColor(key, fallback) {
+        return Customization.color(Customization.part(partStyles, key), fallback, Colors);
+    }
 
     readonly property bool colorbxstEnabled: ModsService.modsEnabled
         && ModsService.mods.some(mod => mod.id === "ecta250.colorbxst" && mod.enabled)
@@ -55,30 +63,90 @@ Item {
     readonly property real minuteGroupWidth: minutesText.width + suffixText.width
     readonly property real digitalWidth: stacked ? Math.max(hoursText.width, minuteGroupWidth)
         : hoursText.width + minuteGroupWidth
-    readonly property real digitalHeight: Math.max(hoursText.height, minutesText.y + minutesText.height)
+    readonly property real digitalHeight: Math.max(hoursText.height, minutesText.naturalY + minutesText.height)
     readonly property real stackedSideWidth: stacked && calendarText ? dateText.width + gap * 2 + Math.max(1, designScale) : 0
     readonly property real timeWidth: orbit ? digitSize : digitalWidth + stackedSideWidth
     readonly property real timeHeight: orbit ? digitSize : stacked ? Math.max(digitalHeight, dateText.height) : digitalHeight
     readonly property real dateBottomHeight: !stacked && calendarText ? gap / 2 + dateText.height : 0
 
-    width: Math.max(timeWidth, stacked ? 0 : dateText.width, showGreeting ? greeting.width : 0)
-    height: timeHeight + dateBottomHeight + (showGreeting ? gap / 2 + greeting.height : 0)
+    readonly property real layoutWidth: Math.max(timeWidth, stacked ? 0 : dateText.width, showGreeting ? greeting.width : 0)
+    readonly property real layoutHeight: timeHeight + dateBottomHeight + (showGreeting ? gap / 2 + greeting.height : 0)
+    readonly property var activeParts: {
+        const items = orbit ? [dial] : [hoursText, minutesText];
+        if (!orbit && (showSeconds || showAmPm))
+            items.push(suffixText);
+        if (calendarText)
+            items.push(dateText);
+        if (showGreeting)
+            items.push(greeting);
+        return items;
+    }
+    readonly property var partLayout: Customization.clockPartLayout(activeParts, layoutWidth, layoutHeight,
+                                                                    settings.clockStyle, designScale)
+    width: partLayout.width
+    height: partLayout.height
+
+    function presetPosition(item, axis) {
+        const horizontal = axis === "x";
+        const start = horizontal ? item.naturalX : item.naturalY;
+        const room = horizontal ? layoutWidth - item.width : layoutHeight - item.height;
+        return Math.round(Customization.clockPartPosition({}, item.partKey, settings.clockStyle, axis, start, room, designScale));
+    }
 
     component ClockText: Text {
+        id: clockText
+        required property string partKey
+        property real naturalX: 0
+        property real naturalY: 0
+        readonly property var partStyle: Customization.part(clock.partStyles, partKey)
+        readonly property var placement: clock.partLayout.placements[partKey]
+        readonly property real xPosition: placement?.xPosition ?? 0
+        readonly property real yPosition: placement?.yPosition ?? 0
+        x: placement?.x ?? 0
+        y: placement?.y ?? 0
         property int textSize: clock.digitSize
-        font.family: clock.settings.clockFont || Config.theme.font
-        font.pixelSize: textSize
-        font.weight: clock.weight
-        font.letterSpacing: textSize * (clock.settings.clockLetterSpacing ?? 0) / 100
-        color: clock.primaryColor
+        readonly property int pixelSize: Math.max(1, Math.round(textSize * Customization.scale(partStyle)))
+        property int defaultWeight: clock.weight
+        property color defaultColor: clock.primaryColor
+        font.family: partStyle.font || clock.settings.clockFont || Config.theme.font
+        font.pixelSize: pixelSize
+        font.weight: partStyle.weight ?? defaultWeight
+        font.letterSpacing: pixelSize * (partStyle.spacing ?? clock.settings.clockLetterSpacing ?? 0) / 100
+        color: Customization.color(partStyle, defaultColor, Colors)
         textFormat: Text.PlainText
         renderType: Text.NativeRendering
     }
 
-    ClockText {
+    component DigitBlock: ClockText {
+        id: digits
+
+        readonly property real sideInset: pixelSize * 0.025
+        readonly property real verticalInset: pixelSize * 0.015
+        readonly property rect ink: glyphs.tightBoundingRect
+
+        // Text layout reserves the glyph advance. The painted glyphs can extend past it.
+        leftPadding: sideInset + Math.ceil(Math.max(0, -ink.x))
+        rightPadding: sideInset + Math.ceil(Math.max(0, ink.x + ink.width - glyphs.advanceWidth))
+        topPadding: verticalInset + Math.ceil(Math.max(0, -ink.y - line.ascent))
+        bottomPadding: verticalInset + Math.ceil(Math.max(0, ink.y + ink.height - line.descent))
+
+        TextMetrics {
+            id: glyphs
+            font: digits.font
+            text: digits.text
+        }
+
+        FontMetrics {
+            id: line
+            font: digits.font
+        }
+    }
+
+    DigitBlock {
         id: hoursText
+        partKey: "hours"
         visible: !clock.orbit
-        x: (clock.width - clock.timeWidth) / 2 + (clock.stacked ? (clock.digitalWidth - width) / 2 : 0)
+        naturalX: (clock.layoutWidth - clock.timeWidth) / 2 + (clock.stacked ? (clock.digitalWidth - width) / 2 : 0)
         text: {
             if (!clock.twelveHour)
                 return Qt.formatTime(clock.currentTime, "hh");
@@ -87,21 +155,23 @@ Item {
         }
     }
 
-    ClockText {
+    DigitBlock {
         id: minutesText
+        partKey: "minutes"
         visible: !clock.orbit
-        x: clock.stacked ? (clock.width - clock.timeWidth + clock.digitalWidth - clock.minuteGroupWidth) / 2
-                         : hoursText.x + hoursText.width
-        y: clock.stacked ? hoursText.height * 0.82 : clock.offsetDigits ? hoursText.height * 0.5 : 0
+        naturalX: clock.stacked ? (clock.layoutWidth - clock.timeWidth + clock.digitalWidth - clock.minuteGroupWidth) / 2
+                                : hoursText.naturalX + hoursText.width
+        naturalY: clock.stacked ? hoursText.height * 0.82 : clock.offsetDigits ? hoursText.height * 0.5 : 0
         text: (clock.offsetDigits || clock.stacked ? "" : ":") + Qt.formatTime(clock.currentTime, "mm")
-        color: clock.secondaryColor
+        defaultColor: clock.secondaryColor
     }
 
     ClockText {
         id: suffixText
+        partKey: "suffix"
         visible: !clock.orbit && text !== ""
-        x: minutesText.x + minutesText.width
-        y: minutesText.y + (clock.offsetDigits ? -hoursText.height * 0.15 : hoursText.height - height)
+        naturalX: minutesText.naturalX + minutesText.width
+        naturalY: minutesText.naturalY + (clock.offsetDigits ? -hoursText.height * 0.15 : hoursText.height - height)
         text: (clock.showSeconds ? ":" + Qt.formatTime(clock.currentTime, "ss") : "")
             + (clock.showAmPm ? " " + Qt.formatTime(clock.currentTime, "AP") : "")
         textSize: Math.max(1, Math.round(clock.digitSize * 0.42))
@@ -109,8 +179,18 @@ Item {
 
     Item {
         id: dial
+        readonly property string partKey: "dial"
+        readonly property var partStyle: Customization.part(clock.partStyles, partKey)
+        readonly property real naturalX: (clock.layoutWidth - width) / 2
+        readonly property real naturalY: 0
+        readonly property var placement: clock.partLayout.placements[partKey]
+        readonly property real xPosition: placement?.xPosition ?? 0
+        readonly property real yPosition: placement?.yPosition ?? 0
+        x: placement?.x ?? 0
+        y: placement?.y ?? 0
         visible: clock.orbit
-        anchors.horizontalCenter: parent.horizontalCenter
+        readonly property color primaryColor: clock.partColor("dial", clock.primaryColor)
+        readonly property color secondaryColor: clock.partColor("dial", clock.secondaryColor)
         width: clock.digitSize
         height: width
 
@@ -125,7 +205,7 @@ Item {
                 y: dial.height * (0.5 - 0.43 * Math.cos(angle)) - height / 2
                 radius: width / 2
                 antialiasing: true
-                color: index % 3 === 0 ? clock.primaryColor : clock.secondaryColor
+                color: index % 3 === 0 ? dial.primaryColor : dial.secondaryColor
             }
         }
 
@@ -141,14 +221,14 @@ Item {
             width: Math.max(1, dial.width * 0.052)
             height: dial.width * 0.23
             rotation: clock.currentTime.getHours() * 30 + clock.currentTime.getMinutes() / 2
-            color: clock.primaryColor
+            color: dial.primaryColor
         }
 
         Hand {
             width: Math.max(1, dial.width * 0.035)
             height: dial.width * 0.36
             rotation: clock.currentTime.getMinutes() * 6 + clock.currentTime.getSeconds() / 10
-            color: clock.secondaryColor
+            color: dial.secondaryColor
         }
 
         Hand {
@@ -156,7 +236,7 @@ Item {
             width: Math.max(1, dial.width * 0.017)
             height: dial.width * 0.39
             rotation: clock.currentTime.getSeconds() * 6
-            color: clock.primaryColor
+            color: dial.primaryColor
         }
 
         Rectangle {
@@ -165,13 +245,13 @@ Item {
             height: width
             radius: width / 2
             antialiasing: true
-            color: clock.primaryColor
+            color: dial.primaryColor
         }
     }
 
     Rectangle {
         visible: clock.stacked && clock.calendarText !== ""
-        x: (clock.width - clock.timeWidth) / 2 + clock.digitalWidth + clock.gap
+        x: Math.max(0, dateText.x - clock.gap)
         width: Math.max(1, clock.designScale)
         height: clock.timeHeight * 0.75
         y: (clock.timeHeight - height) / 2
@@ -181,21 +261,23 @@ Item {
 
     ClockText {
         id: dateText
+        partKey: "date"
         visible: clock.calendarText !== ""
-        x: clock.stacked ? (clock.width - clock.timeWidth) / 2 + clock.digitalWidth + clock.gap * 2 + Math.max(1, clock.designScale)
-                         : (clock.width - width) / 2
-        y: clock.stacked ? (clock.timeHeight - height) / 2 : clock.timeHeight + clock.gap / 2
+        naturalX: clock.stacked ? (clock.layoutWidth - clock.timeWidth) / 2 + clock.digitalWidth + clock.gap * 2 + Math.max(1, clock.designScale)
+                                : (clock.layoutWidth - width) / 2
+        naturalY: clock.stacked ? (clock.timeHeight - height) / 2 : clock.timeHeight + clock.gap / 2
         text: !clock.calendarText ? "" : clock.settings.clockStyle === "inline" ? "—  " + clock.calendarText + "  —" : clock.calendarText
-        color: clock.secondaryColor
-        font.weight: Font.Medium
+        defaultColor: clock.secondaryColor
+        defaultWeight: Font.Medium
         textSize: clock.dateSize
     }
 
     ClockText {
         id: greeting
+        partKey: "greeting"
         visible: clock.showGreeting
-        x: (clock.width - width) / 2
-        y: clock.timeHeight + clock.dateBottomHeight + clock.gap / 2
+        naturalX: (clock.layoutWidth - width) / 2
+        naturalY: clock.timeHeight + clock.dateBottomHeight + clock.gap / 2
         text: clock.currentTime.getHours() < 12 ? "Good morning"
             : clock.currentTime.getHours() < 18 ? "Good afternoon" : "Good evening"
         textSize: clock.dateSize

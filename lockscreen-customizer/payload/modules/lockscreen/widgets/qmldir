@@ -8,3 +8,4 @@ LockscreenWidgetShadow 1.0 LockscreenWidgetShadow.qml
 MediaButton 1.0 MediaButton.qml
 MediaPlayerSelector 1.0 MediaPlayerSelector.qml
 singleton LockscreenSpectrum 1.0 LockscreenSpectrum.qml
+WidgetAppearance 1.0 WidgetAppearance.qml

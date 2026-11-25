@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mnojz.lockscreen-customizer",
   "name": "Lock Screen Customizer",
-  "version": "1.11.0",
+  "version": "1.16.1",
   "description": "Adds lock screen customization for wallpapers, clock, media player, login, and an audio visualizer.",
   "author": "mnojz",
   "compatibility": {
@@ -146,6 +146,16 @@
       "type": "overlay",
       "source": "payload/modules/lockscreen/widgets/MediaPlayerSelector.qml",
       "target": "modules/lockscreen/widgets/MediaPlayerSelector.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/LockscreenCustomization.js",
+      "target": "modules/lockscreen/LockscreenCustomization.js"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/widgets/WidgetAppearance.qml",
+      "target": "modules/lockscreen/widgets/WidgetAppearance.qml"
     },
     {
       "type": "patch",

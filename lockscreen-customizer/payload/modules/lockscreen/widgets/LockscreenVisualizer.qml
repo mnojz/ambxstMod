@@ -2,16 +2,22 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import qs.modules.theme
+import "../LockscreenCustomization.js" as Customization
 
 Item {
     id: root
 
     required property var settings
+    readonly property var appearance: Customization.read(settings.visualizerAppearance)
+    opacity: (appearance.opacity ?? 100) / 100
     property bool captureAudio: false
     property bool sample: false
     property real pixelScale: 1
     readonly property var spectrum: LockscreenSpectrum.bands
-    readonly property color graphColor: settings.visualizerUseShellColors ? Colors.primary : settings.visualizerColor
+    readonly property var editableParts: ({ graph: graph })
+    readonly property color graphColor: Customization.color(
+        Customization.part(Customization.read(settings.visualizerPartStyles), "graph"),
+        settings.visualizerUseShellColors ? Colors.primary : settings.visualizerColor, Colors)
     readonly property int bandsPerChannel: LockscreenSpectrum.bandCount / 2
     readonly property var waveWeights: [20, 15, 6, 1]
     readonly property int barCount: 2 * Math.max(1, Math.floor(width / (16 * pixelScale)))
@@ -73,6 +79,12 @@ Item {
             Component.onCompleted: LockscreenSpectrum.consumers++
             Component.onDestruction: LockscreenSpectrum.consumers--
         }
+    }
+
+    WidgetAppearance {
+        widget: root
+        style: root.appearance
+        renderScale: root.pixelScale
     }
 
     LockscreenWidgetShadow {

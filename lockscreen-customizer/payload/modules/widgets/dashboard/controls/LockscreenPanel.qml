@@ -16,12 +16,27 @@ import qs.modules.theme
 import "../../../../config/defaults/lockscreen.js" as Defaults
 import "../../../../modules/lockscreen/LockscreenPlacement.js" as Placement
 import "../../../../modules/lockscreen/LockscreenPresets.js" as Presets
+import "../../../../modules/lockscreen/LockscreenCustomization.js" as Customization
 
 Control {
     id: root
 
     property string editorWidget: ""
     property var editorSettings
+    property string editorPart: ""
+    property Item editorTarget
+    property string editorPage: "presets"
+    readonly property var editorPages: [
+        ["Presets", "presets"], ["Content", "content"], ["Parts", "parts"], ["Style", "appearance"]
+    ]
+
+    function showEditorPage(pageKey) {
+        editorPage = pageKey;
+        if (viewport)
+            viewport.contentY = 0;
+    }
+    signal editorPartSelected(string part)
+    signal editorPartGuideChanged(string axis)
     property var editorPresetBaseline: ({})
     signal editorValuesChanged(var values)
     signal editorPresetApplied(string widget, var values)
@@ -436,6 +451,36 @@ Control {
         }
     }
 
+    component ColorActions: RowLayout {
+        id: colorActions
+        required property bool overridden
+        required property color currentColor
+        property string customLabel: "Custom color"
+        signal resetColor()
+        signal chooseColor()
+
+        Layout.fillWidth: true
+        uniformCellSizes: true
+        spacing: 8
+
+        ActionButton {
+            Layout.fillWidth: true
+            label: "Default"
+            accent: !colorActions.overridden
+            helpText: "Restore the preset color."
+            onClicked: colorActions.resetColor()
+        }
+
+        ActionButton {
+            Layout.fillWidth: true
+            label: colorActions.customLabel
+            swatchColor: colorActions.currentColor
+            accent: colorActions.overridden
+            helpText: "Pick a custom color."
+            onClicked: colorActions.chooseColor()
+        }
+    }
+
     component FlatCombo: Basic.ComboBox {
         id: combo
         property string helpText: ""
@@ -532,34 +577,38 @@ Control {
         }
     }
 
-    component Choice: SettingRow {
+    component OptionChoice: SettingRow {
         id: choice
-        required property string setting
         required property var options
-        required property real controlWidth
+        required property string selectedValue
+        property string helpText: ""
+        signal valueSelected(string value)
 
         FlatCombo {
-            Layout.preferredWidth: choice.controlWidth
+            Layout.preferredWidth: 152
             model: choice.options.map(option => option[0])
-            currentIndex: Math.max(0, choice.options.findIndex(option => option[1] === root.settings[choice.setting]))
-            helpText: "Choose how thick the clock text looks."
+            currentIndex: Math.max(0, choice.options.findIndex(option => option[1] === choice.selectedValue))
+            helpText: choice.helpText
             Accessible.name: choice.label
-            onActivated: index => root.setSetting(choice.setting, choice.options[index][1])
+            onActivated: index => choice.valueSelected(choice.options[index][1])
         }
     }
 
     component FontPicker: FlatCombo {
         id: fontPicker
+        property string selectedFamily: root.settings.clockFont
+        property string defaultLabel: "Shell font"
+        property var updateFamily: family => root.setSetting("clockFont", family)
         property var families: []
-        readonly property var matchingFamilies: [...new Set(["", root.settings.clockFont, ...families])]
-            .filter(family => (family || "Shell font").toLowerCase().includes((fontSearch?.text || "").trim().toLowerCase()))
+        readonly property var matchingFamilies: [...new Set(["", fontPicker.selectedFamily, ...families])]
+            .filter(family => (family || fontPicker.defaultLabel).toLowerCase().includes((fontSearch?.text || "").trim().toLowerCase()))
 
-        model: matchingFamilies.map(family => family || "Shell font")
-        currentIndex: matchingFamilies.indexOf(root.settings.clockFont)
-        displayText: root.settings.clockFont || "Shell font"
+        model: matchingFamilies.map(family => family || fontPicker.defaultLabel)
+        currentIndex: matchingFamilies.indexOf(selectedFamily)
+        displayText: selectedFamily || defaultLabel
         helpText: "Search for a font or use the shell font."
         Accessible.name: "Clock font family"
-        onActivated: index => root.setSetting("clockFont", matchingFamilies[index])
+        onActivated: index => updateFamily(matchingFamilies[index])
 
         delegate: Basic.ItemDelegate {
             id: fontOption
@@ -707,12 +756,18 @@ Control {
 
     component WidgetSlider: SettingRow {
         id: row
-        required property string key
+        property string key: ""
         required property int minimum
         required property int maximum
         property string unit: "%"
-        property real displayValue: root.settings[key]
+        property string helpText: ""
+        property var snapValue
+        property alias pressed: slider.pressed
+        property real displayValue: root.settings[key] ?? minimum
+        property var update: value => root.setSetting(key, value)
         readonly property real trackWidth: Math.round(Math.min(220, viewport.width * 0.28))
+        readonly property real trackOrigin: unit === "%" && minimum < 0 && maximum > 0
+            ? -minimum / (maximum - minimum) : 0
 
         FontMetrics {
             id: sliderMetrics
@@ -729,9 +784,21 @@ Control {
             to: row.maximum
             stepSize: 1
             snapMode: Slider.SnapAlways
-            value: row.displayValue
+            Binding on value {
+                when: !slider.pressed
+                value: row.displayValue
+                restoreMode: Binding.RestoreNone
+            }
             Accessible.name: row.label
-            onMoved: root.setSetting(row.key, Math.round(value))
+            ToolTip.text: row.helpText
+            ToolTip.visible: hovered && row.helpText !== ""
+            ToolTip.delay: 500
+            onMoved: {
+                const next = pressed && row.snapValue ? row.snapValue(Math.round(value)) : Math.round(value);
+                if (pressed && value !== next)
+                    value = next;
+                row.update(next);
+            }
 
             background: Rectangle {
                 x: slider.leftPadding
@@ -742,10 +809,20 @@ Control {
                 color: Colors.outlineVariant
 
                 Rectangle {
-                    width: slider.visualPosition * parent.width
+                    x: Math.min(slider.visualPosition, row.trackOrigin) * parent.width
+                    width: Math.abs(slider.visualPosition - row.trackOrigin) * parent.width
                     height: parent.height
                     radius: 2
                     color: Colors.primary
+                }
+
+                Rectangle {
+                    visible: row.trackOrigin > 0
+                    x: (parent.width - width) * row.trackOrigin
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 1
+                    height: 7
+                    color: Colors.outline
                 }
             }
 
@@ -770,13 +847,17 @@ Control {
     }
 
     Basic.Popup {
-        id: visualizerColorPicker
+        id: customColorPicker
+        property string pickerTitle: ""
+        property var applyColor
         property real hue: 0
         property real saturation: 0
         property real lightness: 1
         readonly property color draftColor: Qt.hsla(hue, saturation, lightness, 1)
 
-        function openFor(initialColor: color) {
+        function openFor(initialColor: color, title: string, apply: var) {
+            pickerTitle = title;
+            applyColor = apply;
             hue = Math.max(0, initialColor.hslHue);
             saturation = initialColor.hslSaturation;
             lightness = initialColor.hslLightness;
@@ -809,7 +890,7 @@ Control {
             spacing: 8
 
             Label {
-                text: "Visualizer color"
+                text: customColorPicker.pickerTitle
                 color: Colors.overSurface
                 font.bold: true
             }
@@ -818,7 +899,7 @@ Control {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 56
                 radius: 8
-                color: visualizerColorPicker.draftColor
+                color: customColorPicker.draftColor
 
                 Label {
                     anchors.centerIn: parent
@@ -862,9 +943,9 @@ Control {
                         from: 0
                         to: 1
                         stepSize: 1 / channel.modelData.maximum
-                        value: visualizerColorPicker[channel.modelData.key]
+                        value: customColorPicker[channel.modelData.key]
                         Accessible.name: channel.modelData.label
-                        onMoved: visualizerColorPicker[channel.modelData.key] = value
+                        onMoved: customColorPicker[channel.modelData.key] = value
 
                         background: Rectangle {
                             x: hslSlider.leftPadding
@@ -875,13 +956,13 @@ Control {
                             antialiasing: true
                             gradient: Gradient {
                                 orientation: Gradient.Horizontal
-                                GradientStop { position: 0; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
-                                GradientStop { position: 1 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
-                                GradientStop { position: 2 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
-                                GradientStop { position: 3 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
-                                GradientStop { position: 4 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
-                                GradientStop { position: 5 / 6; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
-                                GradientStop { position: 1; color: visualizerColorPicker.trackColor(channel.modelData.key, position) }
+                                GradientStop { position: 0; color: customColorPicker.trackColor(channel.modelData.key, 0) }
+                                GradientStop { position: 1 / 6; color: customColorPicker.trackColor(channel.modelData.key, 1 / 6) }
+                                GradientStop { position: 2 / 6; color: customColorPicker.trackColor(channel.modelData.key, 2 / 6) }
+                                GradientStop { position: 3 / 6; color: customColorPicker.trackColor(channel.modelData.key, 3 / 6) }
+                                GradientStop { position: 4 / 6; color: customColorPicker.trackColor(channel.modelData.key, 4 / 6) }
+                                GradientStop { position: 5 / 6; color: customColorPicker.trackColor(channel.modelData.key, 5 / 6) }
+                                GradientStop { position: 1; color: customColorPicker.trackColor(channel.modelData.key, 1) }
                             }
                         }
 
@@ -893,7 +974,7 @@ Control {
                             radius: width / 2
                             border.width: hslSlider.visualFocus ? 3 : 2
                             border.color: "white"
-                            color: visualizerColorPicker.trackColor(channel.modelData.key, hslSlider.value)
+                            color: customColorPicker.trackColor(channel.modelData.key, hslSlider.value)
                             antialiasing: true
                         }
                     }
@@ -906,15 +987,14 @@ Control {
                 ActionButton {
                     label: "Cancel"
                     helpText: "Close without changing the color."
-                    onClicked: visualizerColorPicker.close()
+                    onClicked: customColorPicker.close()
                 }
                 ActionButton {
                     label: "Use color"
-                    helpText: "Apply this custom color to the visualizer."
+                    helpText: "Apply this custom color."
                     onClicked: {
-                        root.edit({ visualizerUseShellColors: false,
-                                    visualizerColor: visualizerColorPicker.draftColor.toString() });
-                        visualizerColorPicker.close();
+                        customColorPicker.applyColor(customColorPicker.draftColor.toString());
+                        customColorPicker.close();
                     }
                 }
             }
@@ -963,10 +1043,10 @@ Control {
 
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(320, (parent?.width ?? root.width) - 24)
+        width: Math.max(0, Math.min(340, (parent?.width ?? root.width) - 24))
         modal: true
         focus: true
-        padding: 14
+        padding: 16
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onOpened: {
             presetName.forceActiveFocus();
@@ -985,39 +1065,65 @@ Control {
         }
 
         contentItem: ColumnLayout {
-            spacing: 8
+            spacing: 10
 
             Label {
                 text: presetNameDialog.targetPreset ? "Rename preset" : "Save to preset"
                 color: Colors.overSurface
+                font.family: Config.theme.font
+                font.pixelSize: Styling.fontSize(2)
                 font.bold: true
             }
 
             Basic.TextField {
                 id: presetName
                 Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                leftPadding: 10
+                rightPadding: 10
                 maximumLength: 64
+                selectByMouse: true
+                font.family: Config.theme.font
+                font.pixelSize: Styling.fontSize(0)
+                color: Colors.overSurface
+                placeholderTextColor: Colors.overSurfaceVariant
+                selectionColor: Colors.primary
+                selectedTextColor: Colors.overPrimary
+                background: Rectangle {
+                    color: Colors.surfaceContainer
+                    border.color: presetNameDialog.duplicateName ? Colors.error
+                        : presetName.activeFocus ? Colors.primary : Colors.outlineVariant
+                    radius: 6
+                }
                 placeholderText: "Preset name"
                 Accessible.name: placeholderText
                 onAccepted: presetNameDialog.commitName()
             }
 
             Label {
-                visible: presetNameDialog.duplicateName
+                Layout.fillWidth: true
+                opacity: presetNameDialog.duplicateName ? 1 : 0
                 text: "That preset name is already in use."
                 color: Colors.error
             }
 
             RowLayout {
-                Layout.alignment: Qt.AlignRight
+                Layout.fillWidth: true
+                uniformCellSizes: true
+                spacing: 8
 
                 ActionButton {
+                    Layout.fillWidth: true
+                    implicitHeight: 34
                     label: "Cancel"
                     helpText: "Close without saving the name."
                     onClicked: presetNameDialog.close()
                 }
                 ActionButton {
-                    label: "Save"
+                    Layout.fillWidth: true
+                    implicitHeight: 34
+                    label: presetNameDialog.targetPreset ? "Rename" : "Save"
+                    accent: enabled
                     helpText: "Confirm this preset name."
                     enabled: presetNameDialog.enteredName !== "" && !presetNameDialog.duplicateName
                     onClicked: presetNameDialog.commitName()
@@ -1041,11 +1147,17 @@ Control {
             const records = Array.from(root.settings.widgetPresets ?? []);
             const styleKey = kind + "Style";
             const builtins = options.map(option => {
-                const builtin = option.values[styleKey];
+                const builtin = option.id ?? option.values[styleKey];
                 const recordIndex = records.findIndex(record => record?.schemaVersion === Presets.version
                     && record.widget === kind && record.builtin === builtin && typeof record.name === "string");
                 return Object.assign({}, option, {
-                    builtin, recordIndex, name: records[recordIndex]?.name ?? option.name
+                    builtin, recordIndex, name: records[recordIndex]?.name ?? option.name,
+                    values: Object.assign({
+                        [kind + "PartStyles"]: kind === "clock" ? Customization.clockPartStyles("{}", builtin) : "{}",
+                        [kind + "Appearance"]: "{}"
+                    },
+                        kind === "media" ? { mediaLayoutOptions: "{}" }
+                        : kind === "login" ? { loginArrangement: "preset" } : {}, option.values)
                 });
             });
             const saved = [];
@@ -1145,7 +1257,8 @@ Control {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             enabled: false
-                            readonly property var settings: Object.assign({}, root.settings, preset.modelData.values)
+                            readonly property var settings: Object.assign({}, root.settings,
+                                preset.modelData.builtin ? { [grid.kind + "Frame"]: "{}" } : {}, preset.modelData.values)
                             sourceComponent: grid.kind === "clock" ? clockSample
                                 : grid.kind === "media" ? mediaSample
                                 : grid.kind === "visualizer" ? visualizerSample : loginSample
@@ -1161,8 +1274,8 @@ Control {
                                             clockDateRatio: Math.max(23, sample.settings.clockDateRatio)
                                         })
                                         live: false
-                                        renderScale: Math.min(parent.width / Math.max(1, designWidth),
-                                                              parent.height / Math.max(1, designHeight))
+                                        renderScale: Math.min(parent.width / Math.max(1, naturalWidth),
+                                                              parent.height / Math.max(1, naturalHeight))
                                     }
                                 }
                             }
@@ -1245,12 +1358,46 @@ Control {
         }
     }
 
-    onEditorWidgetChanged: if (viewport) viewport.contentY = 0
+    onEditorWidgetChanged: showEditorPage(editorPart ? "parts" : "presets")
+    onEditorPartChanged: if (editorPart) showEditorPage("parts")
+
+    topPadding: inspectorTabs.visible ? inspectorTabs.height + 9 : 0
+
+    RowLayout {
+        id: inspectorTabs
+        visible: root.editorWidget !== ""
+        x: (parent.width - width) / 2
+        width: Math.max(0, parent.width - 12)
+        y: 0
+        spacing: 4
+        z: 1
+        uniformCellSizes: true
+
+        Repeater {
+            model: root.editorPages.filter(page => {
+                if (page[1] === "content")
+                    return root.editorWidget === "clock" || root.editorWidget === "media";
+                return page[1] !== "parts" || root.editorWidget !== "visualizer";
+            })
+
+            ActionButton {
+                required property var modelData
+                Layout.fillWidth: true
+                implicitHeight: 32
+                label: modelData[0]
+                helpText: "Open " + label.toLowerCase() + " settings."
+                accent: root.editorPage === modelData[1]
+                Accessible.checkable: true
+                Accessible.checked: accent
+                onClicked: root.showEditorPage(modelData[1])
+            }
+        }
+    }
 
     contentItem: Flickable {
         id: viewport
         contentWidth: width
-        contentHeight: page.y + page.height + 14 + (root.dirty ? saveBar.height + 12 : 0)
+        contentHeight: page.y + page.height + 14 + (!root.editorWidget && root.dirty ? saveBar.height + 12 : 0)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {}
@@ -1544,7 +1691,7 @@ Control {
                     label: "Slideshow interval"
                     visible: root.mode === "slideshow"
                     FlatCombo {
-
+                        Layout.preferredWidth: 132
                         readonly property var seconds: [...new Set([5, 10, 30, 60, 120, root.settings.wallpaperInterval])].sort((a, b) => a - b)
                         model: seconds.map(value => value + " s")
                         currentIndex: seconds.indexOf(root.settings.wallpaperInterval)
@@ -1559,28 +1706,339 @@ Control {
             }
 
             Section {
-                id: clockSection
-                title: "Clock"
-                presets: clockPresets
-                visible: root.editorWidget === "clock"
+                title: "Presets"
+                visible: root.editorWidget !== "" && root.editorPage === "presets"
+                presets: editorPresets
 
                 PresetGrid {
-                    id: clockPresets
-                    kind: "clock"
-                    options: [
+                    id: editorPresets
+                    kind: root.editorWidget
+                    options: ({
+                        clock: [
                         { name: "Glance", sampleSize: 112, values: { clockStyle: "inline", clockFont: "", clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 21, clockWeight: "light", clockLetterSpacing: 4 } },
                         { name: "Ambxst", sampleSize: 240, values: { clockStyle: "offset", clockFont: "League Gothic", clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 15, clockWeight: "regular", clockLetterSpacing: 0 } },
                         { name: "Stacked", sampleSize: 152, values: { clockStyle: "stacked", clockFont: "", clockDate: true, clockWeekday: "show", clockTimeRatio: 100, clockDateRatio: 24, clockWeight: "semibold", clockLetterSpacing: 0 } },
                         { name: "Orbit", sampleSize: 240, values: { clockStyle: "orbit", clockDate: false, clockWeekday: "hide", clockTimeRatio: 100, clockDateRatio: 10, clockWeight: "regular", clockLetterSpacing: 0 } }
+                    ],
+                        media: [
+                        { name: "Ambxst", sampleSize: 100, values: { mediaStyle: "bg", mediaArtwork: true } },
+                        { name: "Compact", sampleSize: 75, values: { mediaStyle: "compact", mediaArtwork: false } },
+                        { name: "Cover", sampleSize: 100, values: { mediaStyle: "cover", mediaArtwork: false } },
+                        { name: "Outline", sampleSize: 100, values: { mediaStyle: "outline", mediaArtwork: false } },
+                        { id: "stacked-cover", name: "Stacked cover", sampleSize: 100, values: {
+                            mediaStyle: "cover", mediaArtwork: false,
+                            mediaLayoutOptions: '{"artPlacement":"above","playButton":"controls","textAlignment":"center","times":true}'
+                        } }
+                    ],
+                        login: [
+                        { name: "Ambxst", sampleSize: 100, values: { loginStyle: "bg", loginAvatar: true } },
+                        { name: "Minimal", sampleSize: 90, values: { loginStyle: "plain", loginAvatar: false } },
+                        { name: "Profile", sampleSize: 130, values: { loginStyle: "pane", loginAvatar: true } },
+                        { name: "Badge", sampleSize: 100, values: { loginStyle: "badge", loginAvatar: true } },
+                        { name: "Underline", sampleSize: 100, values: { loginStyle: "line", loginAvatar: false } },
+                        { name: "Sign-in card", sampleSize: 100, values: { loginStyle: "card", loginAvatar: false } }
+                    ],
+                        visualizer: [
+                        { name: "Gradient wave", values: { visualizerStyle: "wave" } },
+                        { name: "Rounded bars", values: { visualizerStyle: "bars" } },
+                        { name: "Mirrored bars", values: { visualizerStyle: "mirror" } },
+                        { name: "Ripple ring", values: { visualizerStyle: "ring" } },
+                        { name: "Spectrum dots", values: { visualizerStyle: "dots" } }
                     ]
+                    })[kind] ?? []
+                }
+            }
+
+            Section {
+                id: partSection
+                title: "Widget parts"
+                visible: root.editorWidget !== "" && root.editorPage === "parts"
+                readonly property var options: [["", "Choose a part"], ...(Customization.parts[root.editorWidget] ?? [])
+                    .filter(option => ["art", "avatar"].includes(option[0])
+                        || (root.editorTarget?.editableParts?.[option[0]]?.visible ?? true))]
+                readonly property var selected: options.find(option => option[0] === root.editorPart) ?? options[0]
+                readonly property Item targetPart: root.editorTarget?.editableParts?.[selected[0]] ?? null
+                readonly property bool artworkSelected: root.editorWidget === "media" && selected[0] === "art"
+                readonly property bool avatarSelected: root.editorWidget === "login" && selected[0] === "avatar"
+                readonly property bool showPartColor: selected[0] !== "" && (!artworkSelected || mediaSection.hasArtwork)
+                    && (!avatarSelected || root.settings.loginAvatar)
+                readonly property bool clockPart: root.editorWidget === "clock" && targetPart !== null
+                readonly property bool movesHorizontally: clockPart
+                    && (selected[0] !== "dial" || root.editorTarget.width - targetPart.width > 1)
+                readonly property bool movesVertically: clockPart
+                    && (selected[0] !== "dial" || root.editorTarget.height - targetPart.height > 1)
+                readonly property var styles: Customization.read(root.settings[root.editorWidget + "PartStyles"])
+                readonly property var currentStyle: Customization.part(styles, selected[0])
+                readonly property bool scalable: selected[2] || (avatarSelected && root.settings.loginAvatar)
+
+                function positionPercent(axis) {
+                    return Math.round(targetPart?.[axis + "Position"] ?? 0);
+                }
+
+                function movePart(axis, value) {
+                    if (!clockPart)
+                        return;
+                    const presetValue = root.editorTarget.presetPosition(targetPart, axis);
+                    root.setSetting(root.editorWidget + "PartStyles",
+                        Customization.editClockPosition(styles, selected[0], axis, value, presetValue));
+                }
+
+                function change(property, value) {
+                    root.setSetting(root.editorWidget + "PartStyles",
+                                    Customization.editPart(styles, selected[0], property, value));
+                }
+
+                FlatCombo {
+                    Layout.fillWidth: true
+                    model: partSection.options.map(option => option[1])
+                    currentIndex: partSection.options.indexOf(partSection.selected)
+                    helpText: "Choose a part here or click it on the canvas."
+                    Accessible.name: "Widget part"
+                    onActivated: index => root.editorPartSelected(partSection.options[index][0])
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: partSection.artworkSelected
+                    spacing: 8
+
+                    WidgetToggle {
+                        label: "Show album art"
+                        key: "artwork"
+                        value: mediaSection.hasArtwork
+                        helpText: "Show the album cover."
+                        update: enabled => mediaSection.change("artwork", enabled === mediaSection.defaultArtwork ? undefined : enabled)
+                    }
+
+                    OptionChoice {
+                        label: "Artwork position"
+                        selectedValue: mediaSection.options.artPlacement ?? "auto"
+                        visible: mediaSection.hasArtwork
+                        options: [["Automatic", "auto"], ["Above track", "above"], ["Left", "left"], ["Right", "right"]]
+                        helpText: "Automatic puts artwork on top in narrow, tall cards."
+                        onValueSelected: value => mediaSection.change("artPlacement", value === "auto" ? undefined : value)
+                    }
+
+                    OptionChoice {
+                        label: "Play button"
+                        selectedValue: mediaSection.options.playButton ?? "art"
+                        visible: mediaSection.hasArtwork && (mediaSection.options.transport ?? true)
+                        options: [["On artwork", "art"], ["In controls", "controls"]]
+                        helpText: "Choose where the play and pause control appears."
+                        onValueSelected: value => mediaSection.change("playButton", value === "art" ? undefined : value)
+                    }
+
+                    WidgetSlider {
+                        label: "Artwork gap"
+                        visible: mediaSection.hasArtwork
+                        minimum: 4
+                        maximum: 28
+                        unit: "px"
+                        displayValue: mediaSection.options.gap ?? 16
+                        update: value => mediaSection.change("gap", value === 16 ? undefined : value)
+                    }
+
+                    WidgetSlider {
+                        label: "Artwork size"
+                        visible: mediaSection.hasArtwork
+                        key: "mediaThumbnailRatio"
+                        minimum: 20
+                        maximum: 100
+                        displayValue: root.settings.mediaThumbnailRatio >= 0 ? root.settings.mediaThumbnailRatio
+                            : mediaSection.topArtwork ? (mediaSection.options.wideArtwork === false ? 46 : 75)
+                            : root.settings.mediaStyle === "cover" ? 95 : root.settings.mediaStyle === "pane" ? 80 : 100
+                    }
+                    WidgetSlider {
+                        label: "Artwork corner radius"
+                        key: "mediaThumbnailRadius"
+                        minimum: 0
+                        maximum: 52
+                        unit: "px"
+                        visible: mediaSection.hasArtwork
+                        displayValue: root.settings.mediaThumbnailRadius >= 0 ? root.settings.mediaThumbnailRadius
+                            : ["cover", "pane"].includes(root.settings.mediaStyle) ? 12
+                            : Math.round((root.settings.mediaStyle === "compact" ? 44 : 64) * Config.roundness / 32)
+                    }
+                    WidgetToggle {
+                        label: "Show entire cover"
+                        key: "fitArtwork"
+                        visible: mediaSection.hasArtwork
+                        value: mediaSection.options.fitArtwork ?? false
+                        update: checked => mediaSection.change(key, checked || undefined)
+                        helpText: "Fit the cover inside its frame instead of cropping its edges."
+                    }
                 }
 
                 Label {
-                    text: "Content"
+                    visible: partSection.selected[2] === true
+                    Layout.topMargin: 3
+                    text: "Typography"
                     color: Colors.overSurfaceVariant
                     font.bold: true
-                    font.letterSpacing: 1
                 }
+
+                SettingRow {
+                    label: "Font"
+                    visible: partSection.selected[2] === true
+
+                    FontPicker {
+                        Layout.preferredWidth: 160
+                        selectedFamily: partSection.currentStyle.font ?? ""
+                        defaultLabel: "Preset font"
+                        updateFamily: font => partSection.change("font", font || undefined)
+                        helpText: "Choose a font for this part."
+                        Accessible.name: "Part font"
+                    }
+                }
+
+                SettingRow {
+                    label: "Weight"
+                    visible: partSection.selected[2] === true
+
+                    FlatCombo {
+                        readonly property var weights: [["Preset weight", undefined], ["Light", Font.Light],
+                            ["Regular", Font.Normal], ["Medium", Font.Medium],
+                            ["Semibold", Font.DemiBold], ["Bold", Font.Bold], ["Black", Font.Black]]
+                        Layout.preferredWidth: 160
+                        model: weights.map(option => option[0])
+                        currentIndex: Math.max(0, weights.findIndex(option => option[1] === partSection.currentStyle.weight))
+                        helpText: "Choose the weight of this part’s text."
+                        Accessible.name: "Part font weight"
+                        onActivated: index => partSection.change("weight", weights[index][1])
+                    }
+                }
+
+                WidgetSlider {
+                    label: "Relative size"
+                    visible: partSection.scalable
+                    minimum: 65
+                    maximum: 150
+                    displayValue: partSection.currentStyle.scale ?? 100
+                    update: value => partSection.change("scale", value === 100 ? undefined : value)
+                }
+
+                WidgetSlider {
+                    label: "Letter spacing"
+                    visible: partSection.selected[2] === true
+                    minimum: -10
+                    maximum: 25
+                    unit: "em"
+                    displayValue: partSection.currentStyle.spacing ?? (root.editorWidget === "clock" ? root.settings.clockLetterSpacing : 0)
+                    update: value => partSection.change("spacing", value)
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: partSection.avatarSelected
+                    spacing: 8
+
+                    WidgetToggle {
+                        label: "Show profile picture"
+                        key: "loginAvatar"
+                        helpText: "Display your profile picture on the login widget."
+                    }
+
+                    OptionChoice {
+                        label: "Profile picture position"
+                        selectedValue: root.settings.loginArrangement
+                        visible: root.settings.loginAvatar
+                        options: [["Preset (adaptive)", "preset"], ["Above password", "above"], ["Left of password", "left"], ["Right of password", "right"]]
+                        helpText: "The adaptive preset places the picture above the field in narrow, tall widgets."
+                        onValueSelected: value => root.setSetting("loginArrangement", value)
+                    }
+                }
+
+                WidgetSlider {
+                    label: "Profile rounding"
+                    visible: partSection.avatarSelected && root.settings.loginAvatar
+                    minimum: 0
+                    maximum: 100
+                    displayValue: partSection.currentStyle.radius ?? Math.round(100 * Config.roundness / 16)
+                    update: value => partSection.change("radius", value)
+                }
+
+                SettingRow {
+                    label: "Placeholder"
+                    visible: root.editorWidget === "login" && partSection.selected[0] === "password"
+
+                    Basic.TextField {
+                        Layout.preferredWidth: 160
+                        text: partSection.currentStyle.placeholder ?? ""
+                        placeholderText: "Preset text"
+                        maximumLength: 80
+                        Accessible.name: "Password field placeholder"
+                        onTextEdited: partSection.change("placeholder", text || undefined)
+                    }
+                }
+
+                Label {
+                    visible: partSection.showPartColor
+                    Layout.topMargin: 3
+                    text: partSection.artworkSelected ? "Outline color" : "Color"
+                    color: Colors.overSurfaceVariant
+                    font.bold: true
+                }
+
+                ColorActions {
+                    visible: partSection.showPartColor
+                    overridden: Boolean(partSection.currentStyle.color)
+                    currentColor: Customization.color(partSection.currentStyle, Colors.primary, Colors)
+                    onResetColor: partSection.change("color", undefined)
+                    onChooseColor: {
+                        const widget = root.editorWidget;
+                        const key = root.editorPart;
+                        customColorPicker.openFor(currentColor, partSection.selected[1] + " color", color => {
+                            const setting = widget + "PartStyles";
+                            root.setSetting(setting, Customization.editPart(Customization.read(root.settings[setting]), key, "color", color));
+                        });
+                    }
+                }
+
+                Label {
+                    visible: partSection.movesHorizontally || partSection.movesVertically
+                    Layout.topMargin: 3
+                    text: "Position in widget"
+                    color: Colors.overSurfaceVariant
+                    font.bold: true
+                }
+
+                WidgetSlider {
+                    label: "Horizontal"
+                    visible: partSection.movesHorizontally
+                    minimum: -100
+                    maximum: 100
+                    helpText: "Zero centers this part. The ends of the slider align it to the frame edges."
+                    snapValue: Customization.snapClockPosition
+                    onPressedChanged: root.editorPartGuideChanged(pressed ? "x" : "")
+                    displayValue: partSection.positionPercent("x")
+                    update: value => partSection.movePart("x", value)
+                }
+
+                WidgetSlider {
+                    label: "Vertical"
+                    visible: partSection.movesVertically
+                    minimum: -100
+                    maximum: 100
+                    helpText: "Zero centers this part. The ends of the slider align it to the frame edges."
+                    snapValue: Customization.snapClockPosition
+                    onPressedChanged: root.editorPartGuideChanged(pressed ? "y" : "")
+                    displayValue: partSection.positionPercent("y")
+                    update: value => partSection.movePart("y", value)
+                }
+
+                ActionButton {
+                    Layout.alignment: Qt.AlignRight
+                    label: "Reset part to preset"
+                    helpText: "Restore the preset appearance for the selected part."
+                    visible: partSection.selected[0] !== "" && Object.keys(partSection.currentStyle).length > 0
+                    onClicked: partSection.change("", undefined)
+                }
+            }
+
+            Section {
+                id: clockSection
+                title: "Clock"
+                visible: root.editorWidget === "clock" && root.editorPage === "content"
 
                 GridLayout {
                     Layout.fillWidth: true
@@ -1606,178 +2064,105 @@ Control {
                     }
                 }
 
-                Label {
-                    text: "Time & Typography"
-                    color: Colors.overSurfaceVariant
-                    font.bold: true
-                    font.letterSpacing: 1
-                }
+                SettingRow {
+                    label: "Time format"
 
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: clockSection.width >= 510 ? 2 : 1
-                    columnSpacing: 12
-                    rowSpacing: 6
+                    RowLayout {
+                        id: formatOptions
+                        spacing: 3
+                        readonly property bool twelveHour: root.settings.clockFormat === "12h"
+                            || (root.settings.clockFormat === "shell" && Config.bar.use12hFormat)
 
-                    ClockGroup {
-                        SettingRow {
-                            label: "Time format"
-
-                            RowLayout {
-                                id: formatOptions
-                                spacing: 3
-                                readonly property bool twelveHour: root.settings.clockFormat === "12h"
-                                    || (root.settings.clockFormat === "shell" && Config.bar.use12hFormat)
-
-                                Repeater {
-                                    model: [{ label: "12h", value: "12h" }, { label: "24h", value: "24h" }]
-                                    delegate: ActionButton {
-                                        required property var modelData
-                                        label: modelData.label
-                                        helpText: modelData.value === "12h" ? "Use a 12-hour clock." : "Use a 24-hour clock."
-                                        horizontalPadding: 6
-                                        accent: formatOptions.twelveHour === (modelData.value === "12h")
-                                        Accessible.name: modelData.value === "12h" ? "12-hour format" : "24-hour format"
-                                        Accessible.checkable: true
-                                        Accessible.checked: accent
-                                        onClicked: root.setSetting("clockFormat", modelData.value)
-                                    }
-                                }
-
-                                ActionButton {
-                                    label: "AM/PM"
-                                    helpText: "Show AM or PM when using the 12-hour clock."
-                                    horizontalPadding: 6
-                                    enabled: formatOptions.twelveHour
-                                    accent: enabled && root.settings.clockAmPm
-                                    Accessible.name: "Show AM or PM"
-                                    Accessible.checkable: true
-                                    Accessible.checked: accent
-                                    onClicked: root.setSetting("clockAmPm", !root.settings.clockAmPm)
-                                }
+                        Repeater {
+                            model: [{ label: "12h", value: "12h" }, { label: "24h", value: "24h" }]
+                            delegate: ActionButton {
+                                required property var modelData
+                                label: modelData.label
+                                helpText: modelData.value === "12h" ? "Use a 12-hour clock." : "Use a 24-hour clock."
+                                horizontalPadding: 6
+                                accent: formatOptions.twelveHour === (modelData.value === "12h")
+                                Accessible.name: modelData.value === "12h" ? "12-hour format" : "24-hour format"
+                                Accessible.checkable: true
+                                Accessible.checked: accent
+                                onClicked: root.setSetting("clockFormat", modelData.value)
                             }
                         }
 
-                        SettingRow {
-                            label: "Font family"
-                            FontPicker {
-                                Layout.preferredWidth: formatOptions.implicitWidth
-                            }
-                        }
-
-                        Choice {
-                            label: "Font weight"
-                            setting: "clockWeight"
-                            controlWidth: formatOptions.implicitWidth
-                            options: [["Preset default", "legacy"], ["Light", "light"], ["Regular", "regular"],
-                                      ["Medium", "medium"], ["Semibold", "semibold"], ["Bold", "bold"], ["Black", "black"]]
+                        ActionButton {
+                            label: "AM/PM"
+                            helpText: "Show AM or PM when using the 12-hour clock."
+                            horizontalPadding: 6
+                            enabled: formatOptions.twelveHour
+                            accent: enabled && root.settings.clockAmPm
+                            Accessible.name: "Show AM or PM"
+                            Accessible.checkable: true
+                            Accessible.checked: accent
+                            onClicked: root.setSetting("clockAmPm", !root.settings.clockAmPm)
                         }
                     }
+                }
 
-                    ClockGroup {
-                        WidgetSlider {
-                            label: "Date proportion"
-                            key: "clockDateRatio"
-                            minimum: 5
-                            maximum: 65
-                            displayValue: root.settings.clockDateRatio || (root.settings.clockDateSize > 0
-                                ? root.settings.clockDateSize * 100 / Math.max(1, root.settings.clockSize) : 19)
-                        }
-                        WidgetSlider { label: "Letter spacing"; key: "clockLetterSpacing"; minimum: -10; maximum: 25; unit: "em" }
+            }
+
+            Section {
+                id: mediaSection
+                title: "Playback and track"
+                visible: root.editorWidget === "media" && root.editorPage === "content"
+                readonly property var options: Customization.read(root.settings.mediaLayoutOptions)
+                readonly property string style: root.settings.mediaStyle
+                readonly property bool compactStyle: ["compact", "ribbon"].includes(style)
+                readonly property bool defaultArtwork: !["outline", "ribbon"].includes(style)
+                readonly property bool hasArtwork: options.artwork ?? defaultArtwork
+                readonly property bool topArtwork: options.artPlacement === "above" || (root.editorTarget?.artworkAbove ?? false)
+
+                function change(key, value) {
+                    root.setSetting("mediaLayoutOptions", Customization.editOption(options, key, value));
+                }
+
+                OptionChoice {
+                    label: "Text alignment"
+                    selectedValue: mediaSection.options.textAlignment ?? "left"
+                    options: [["Left", "left"], ["Center", "center"], ["Right", "right"]]
+                    helpText: "Align the track title, artist, and heading."
+                    onValueSelected: value => mediaSection.change("textAlignment", value === "left" ? undefined : value)
+                }
+
+                Repeater {
+                    model: root.editorWidget === "media" ? [
+                        ["heading", "Now playing heading", mediaSection.style === "pane", "Show a label above the track."],
+                        ["title", "Track title", true, "Show the name of the current track."],
+                        ["artist", "Artist", !mediaSection.compactStyle, "Show the performer when provided by the player."],
+                        ["progress", "Progress slider", true, "Show track progress and allow seeking when supported."],
+                        ["times", "Elapsed time and duration", false, "Show the current position and total track length."],
+                        ["transport", "Playback buttons", true, "Show play, pause, and track navigation."],
+                        ["mode", "Shuffle and repeat", !mediaSection.compactStyle, "Show the playback mode button."],
+                        ["app", "Player icon", true, "Show the app icon and player picker."]
+                    ] : []
+
+                    delegate: WidgetToggle {
+                        required property var modelData
+                        key: modelData[0]
+                        label: modelData[1]
+                        value: mediaSection.options[key] ?? modelData[2]
+                        helpText: modelData[3]
+                        update: checked => mediaSection.change(key, checked === modelData[2] ? undefined : checked)
                     }
                 }
             }
 
             Section {
-                title: "Media player"
-                presets: mediaPresets
-                visible: root.editorWidget === "media"
-                PresetGrid {
-                    id: mediaPresets
-                    kind: "media"
-                    options: [
-                        { name: "Ambxst", sampleSize: 100, values: { mediaStyle: "bg", mediaArtwork: true } },
-                        { name: "Compact", sampleSize: 75, values: { mediaStyle: "compact", mediaArtwork: false } },
-                        { name: "Cover", sampleSize: 100, values: { mediaStyle: "cover", mediaArtwork: false } },
-                        { name: "Outline", sampleSize: 100, values: { mediaStyle: "outline", mediaArtwork: false } }
-                    ]
-                }
-
-                WidgetSlider {
-                    label: "Background corner radius"
-                    key: "mediaRadius"
-                    minimum: 0
-                    maximum: 70
-                    unit: "px"
-                    displayValue: root.settings.mediaRadius >= 0 ? root.settings.mediaRadius
-                        : ["cover", "outline"].includes(root.settings.mediaStyle) ? 14
-                        : Math.round((root.settings.mediaStyle === "pane" ? 112 : root.settings.mediaStyle === "ribbon" ? 66
-                            : root.settings.mediaStyle === "compact" ? 76 : 96) * Config.roundness / 32)
-                }
-                WidgetSlider {
-                    label: "Thumbnail size"
-                    key: "mediaThumbnailRatio"
-                    minimum: 20
-                    maximum: 100
-                    enabled: !["outline", "ribbon"].includes(root.settings.mediaStyle)
-                    displayValue: root.settings.mediaThumbnailRatio >= 0 ? root.settings.mediaThumbnailRatio
-                        : root.settings.mediaStyle === "cover" ? 95 : root.settings.mediaStyle === "pane" ? 80 : 100
-                }
-                WidgetSlider {
-                    label: "Thumbnail corner radius"
-                    key: "mediaThumbnailRadius"
-                    minimum: 0
-                    maximum: 52
-                    unit: "px"
-                    enabled: !["outline", "ribbon"].includes(root.settings.mediaStyle)
-                    displayValue: root.settings.mediaThumbnailRadius >= 0 ? root.settings.mediaThumbnailRadius
-                        : ["cover", "pane"].includes(root.settings.mediaStyle) ? 12
-                        : Math.round((root.settings.mediaStyle === "compact" ? 44 : 64) * Config.roundness / 32)
-                }
-                WidgetToggle { label: "Blur thumbnail as background"; helpText: "Use blurred album artwork behind the media controls."; key: "mediaArtwork" }
-            }
-
-            Section {
-                title: "Login"
-                presets: loginPresets
-                visible: root.editorWidget === "login"
-
-                PresetGrid {
-                    id: loginPresets
-                    kind: "login"
-                    options: [
-                        { name: "Ambxst", sampleSize: 100, values: { loginStyle: "bg", loginAvatar: true } },
-                        { name: "Minimal", sampleSize: 90, values: { loginStyle: "plain", loginAvatar: false } },
-                        { name: "Profile", sampleSize: 130, values: { loginStyle: "pane", loginAvatar: true } },
-                        { name: "Badge", sampleSize: 100, values: { loginStyle: "badge", loginAvatar: true } },
-                        { name: "Underline", sampleSize: 100, values: { loginStyle: "line", loginAvatar: false } },
-                        { name: "Sign-in card", sampleSize: 100, values: { loginStyle: "card", loginAvatar: false } }
-                    ]
-                }
-
-                WidgetToggle {
-                    label: "Show profile picture"
-                    key: "loginAvatar"
-                    helpText: "Display your profile picture on the login widget."
-                }
-            }
-
-            Section {
+                id: visualizerSection
                 title: "Audio visualizer"
-                presets: visualizerPresets
-                visible: root.editorWidget === "visualizer"
+                readonly property var styles: Customization.read(root.settings.visualizerPartStyles)
+                readonly property var graphStyle: Customization.part(styles, "graph")
 
-                PresetGrid {
-                    id: visualizerPresets
-                    kind: "visualizer"
-                    options: [
-                        { name: "Gradient wave", values: { visualizerStyle: "wave" } },
-                        { name: "Rounded bars", values: { visualizerStyle: "bars" } },
-                        { name: "Mirrored bars", values: { visualizerStyle: "mirror" } },
-                        { name: "Ripple ring", values: { visualizerStyle: "ring" } },
-                        { name: "Spectrum dots", values: { visualizerStyle: "dots" } }
-                    ]
+                function setColor(useShell, color) {
+                    root.edit({ visualizerUseShellColors: useShell, visualizerColor: color,
+                                visualizerPartStyles: Customization.editPart(styles, "graph", "color", undefined) });
                 }
+
+                visible: root.editorWidget === "visualizer" && root.editorPage === "appearance"
+
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -1788,33 +2173,132 @@ Control {
                         Layout.fillWidth: true
                         label: "Use shell colors"
                         helpText: "Follow the shell theme’s primary color."
-                        accent: root.settings.visualizerUseShellColors
+                        accent: root.settings.visualizerUseShellColors && !visualizerSection.graphStyle.color
                         Accessible.checkable: true
                         Accessible.checked: accent
-                        onClicked: root.setSetting("visualizerUseShellColors", true)
+                        onClicked: visualizerSection.setColor(true, root.settings.visualizerColor)
                     }
 
                     ActionButton {
                         Layout.fillWidth: true
                         label: "Custom color"
-                        swatchColor: root.settings.visualizerColor
-                        accent: !root.settings.visualizerUseShellColors
+                        swatchColor: Customization.color(visualizerSection.graphStyle, root.settings.visualizerColor, Colors)
+                        accent: !root.settings.visualizerUseShellColors || Boolean(visualizerSection.graphStyle.color)
                         Accessible.checkable: true
                         Accessible.checked: accent
                         helpText: "Choose a color for this visualizer."
-                        onClicked: visualizerColorPicker.openFor(root.settings.visualizerColor)
+                        onClicked: customColorPicker.openFor(swatchColor, "Visualizer color",
+                            color => visualizerSection.setColor(false, color))
                     }
                 }
             }
 
             Section {
+                id: appearanceSection
                 title: "Appearance"
-                visible: root.editorWidget !== ""
+                visible: root.editorWidget !== "" && root.editorPage === "appearance"
+                readonly property string setting: root.editorWidget + "Appearance"
+                readonly property var style: Customization.read(root.settings[setting])
+
+                function change(key, value) {
+                    root.setSetting(setting, Customization.editOption(style, key, value));
+                }
+
+                function pick(key, fallback, title) {
+                    const target = setting;
+                    customColorPicker.openFor(Customization.color({ color: style[key] }, fallback, Colors), title, color =>
+                        root.setSetting(target, Customization.editOption(Customization.read(root.settings[target]), key, color)));
+                }
+
+                WidgetSlider {
+                    label: "Widget opacity"
+                    minimum: 15
+                    maximum: 100
+                    displayValue: appearanceSection.style.opacity ?? 100
+                    update: value => appearanceSection.change("opacity", value === 100 ? undefined : value)
+                }
+
+                OptionChoice {
+                    label: "Background fill"
+                    selectedValue: appearanceSection.style.fill ?? "preset"
+                    options: [["Preset", "preset"], ["Solid", "solid"], ["Transparent", "none"]]
+                    helpText: "Keep the preset background, add a solid fill, or make it transparent."
+                    onValueSelected: value => appearanceSection.change("fill", value === "preset" ? undefined : value)
+                }
+
+                ColorActions {
+                    visible: appearanceSection.style.fill === "solid"
+                    overridden: Boolean(appearanceSection.style.fillColor)
+                    currentColor: Customization.color({ color: appearanceSection.style.fillColor }, Colors.surfaceContainer, Colors)
+                    customLabel: "Fill color"
+                    onResetColor: appearanceSection.change("fillColor", undefined)
+                    onChooseColor: appearanceSection.pick("fillColor", Colors.surfaceContainer, "Background fill color")
+                }
+
+                WidgetSlider {
+                    label: "Fill opacity"
+                    visible: appearanceSection.style.fill === "solid"
+                    minimum: 0
+                    maximum: 100
+                    displayValue: appearanceSection.style.fillOpacity ?? 85
+                    update: value => appearanceSection.change("fillOpacity", value === 85 ? undefined : value)
+                }
+
+                WidgetToggle {
+                    label: "Blur artwork behind card"
+                    visible: root.editorWidget === "media" && (appearanceSection.style.fill ?? "preset") === "preset"
+                    helpText: "Use blurred artwork when the background fill follows the preset."
+                    key: "mediaArtwork"
+                }
+
+                WidgetToggle {
+                    label: "Widget border"
+                    key: "border"
+                    value: appearanceSection.style.border ?? false
+                    update: checked => appearanceSection.change(key, checked || undefined)
+                    helpText: "Draw an outline around the widget."
+                }
+
+                ColorActions {
+                    visible: Boolean(appearanceSection.style.border)
+                    overridden: Boolean(appearanceSection.style.borderColor)
+                    currentColor: Customization.color({ color: appearanceSection.style.borderColor }, Colors.outline, Colors)
+                    customLabel: "Border color"
+                    onResetColor: appearanceSection.change("borderColor", undefined)
+                    onChooseColor: appearanceSection.pick("borderColor", Colors.outline, "Widget border color")
+                }
+
+                WidgetSlider {
+                    label: "Border width"
+                    visible: Boolean(appearanceSection.style.border)
+                    minimum: 1
+                    maximum: 8
+                    unit: "px"
+                    displayValue: appearanceSection.style.borderWidth ?? 1
+                    update: value => appearanceSection.change("borderWidth", value === 1 ? undefined : value)
+                }
+
+                WidgetSlider {
+                    label: "Corner radius"
+                    minimum: 0
+                    maximum: 80
+                    unit: "px"
+                    displayValue: appearanceSection.style.radius ?? (root.editorWidget === "media" && root.settings.mediaRadius >= 0
+                        ? root.settings.mediaRadius : Config.roundness)
+                    update: value => appearanceSection.change("radius", value)
+                }
 
                 WidgetToggle {
                     label: "Drop shadow"
                     helpText: "Add a soft shadow behind this widget."
                     key: root.editorWidget + "Shadow"
+                }
+
+                ActionButton {
+                    Layout.alignment: Qt.AlignRight
+                    label: "Reset appearance"
+                    visible: Object.keys(appearanceSection.style).length > 0 || root.settings[root.editorWidget + "Shadow"] === true
+                    onClicked: root.edit({ [appearanceSection.setting]: "{}", [root.editorWidget + "Shadow"]: false })
                 }
             }
 

@@ -7,6 +7,8 @@ import "LockscreenPlacement.js" as Placement
 Item {
     id: root
     required property Item widget
+    required property rect targetBounds
+    property var partBounds: null
     required property string title
     required property bool selected
     required property var siblings
@@ -14,23 +16,29 @@ Item {
     property real guideY: -1
     property bool toolsAvailable: true
     property bool freeResize: false
+    property real minimumWidth: 36
+    property real minimumHeight: 36
+    property var adjustHeight
+    property string partGuideAxis: ""
+    property real partGuideValue: 0
     signal toolsRequested()
     signal select()
-    signal done(real x, real y, real width, real height)
+    signal partTapped(point position)
+    signal done(real x, real y, real width, real height, bool resizing)
 
     property rect original
     property rect draft
     property bool moving: false
-    readonly property real targetWidth: widget.baseWidth * widget.baseScale
-    readonly property real targetHeight: widget.baseHeight * widget.baseScale
+    property bool resizing: false
 
-    x: moving ? draft.x : widget.baseX
-    y: moving ? draft.y : widget.baseY
-    width: moving ? draft.width : targetWidth
-    height: moving ? draft.height : targetHeight
+    x: moving ? draft.x : targetBounds.x
+    y: moving ? draft.y : targetBounds.y
+    width: moving ? draft.width : targetBounds.width
+    height: moving ? draft.height : targetBounds.height
 
-    function begin() {
-        original = Qt.rect(widget.baseX, widget.baseY, targetWidth, targetHeight);
+    function begin(resizeDrag = false) {
+        resizing = resizeDrag;
+        original = targetBounds;
         draft = original;
         guideX = -1;
         guideY = -1;
@@ -58,6 +66,16 @@ Item {
         if (freeResize) {
             const horizontal = resizeAxis(original.x, original.width, parent.width, dx, signX, true);
             const vertical = resizeAxis(original.y, original.height, parent.height, dy, signY, false);
+            if (adjustHeight) {
+                const height = Math.min(parent.height, adjustHeight(horizontal.length, vertical.length));
+                if (height > vertical.length) {
+                    const start = signY < 0 ? Math.max(0, vertical.start + vertical.length - height)
+                        : Math.min(vertical.start, parent.height - height);
+                    vertical.guide = start < vertical.start ? start : start + height;
+                    vertical.start = start;
+                    vertical.length = height;
+                }
+            }
             guideX = horizontal.guide;
             guideY = vertical.guide;
             draft = Qt.rect(horizontal.start, vertical.start, horizontal.length, vertical.length);
@@ -74,7 +92,7 @@ Item {
         const ratio = Math.max(0.01, original.height / Math.max(1, original.width));
         const maximum = Math.min(horizontal, vertical / ratio);
         const projected = (signX * dx + signY * dy * ratio) / ((signX ? 1 : 0) + (signY ? ratio * ratio : 0));
-        const minimum = Math.min(36, maximum);
+        const minimum = Math.min(Math.max(36, minimumWidth, minimumHeight / ratio), maximum);
         let width = Math.max(minimum, Math.min(maximum, original.width + projected));
 
         const xRange = [anchorX + signX * minimum, anchorX + signX * maximum];
@@ -100,31 +118,76 @@ Item {
         draft = Qt.rect(anchorX - (1 - signX) * width / 2, anchorY - (1 - signY) * height / 2, width, height);
     }
 
+    function partGuidePosition(horizontal) {
+        if (!partBounds)
+            return -1;
+        const start = horizontal ? partBounds.x : partBounds.y;
+        const size = horizontal ? partBounds.width : partBounds.height;
+        const available = horizontal ? width : height;
+        if (partGuideValue <= -100)
+            return 0;
+        if (partGuideValue >= 100)
+            return available;
+        return start + size / 2;
+    }
+
     function resizeAxis(start, length, available, delta, side, horizontal) {
         if (side === 0)
             return { start, length, guide: -1 };
 
         const anchor = side < 0 ? start + length : start;
-        const minLength = Math.min(36, side < 0 ? anchor : available - anchor);
+        const minLength = Math.min(horizontal ? minimumWidth : minimumHeight, side < 0 ? anchor : available - anchor);
         const minimum = side < 0 ? 0 : anchor + minLength;
         const maximum = side < 0 ? anchor - minLength : available;
         const edge = Math.max(minimum, Math.min(maximum, start + (side > 0 ? length : 0) + delta));
         const snapped = Placement.snap(edge, [0], Placement.alignmentGuides(available, siblings, horizontal), minimum, maximum);
-        return { start: Math.min(anchor, snapped.position), length: Math.abs(anchor - snapped.position), guide: snapped.guide };
+        return {
+            start: Math.min(anchor, snapped.position), length: Math.abs(anchor - snapped.position),
+            guide: snapped.guide
+        };
     }
 
     function finish() {
         if (!moving)
             return;
         if (draft !== original)
-            done(x, y, width, height);
+            done(x, y, width, height, resizing);
         moving = false;
+    }
+
+    Rectangle {
+        visible: root.partBounds !== null
+        x: (root.partBounds?.x ?? 0) - 2
+        y: (root.partBounds?.y ?? 0) - 2
+        width: (root.partBounds?.width ?? 0) + 4
+        height: (root.partBounds?.height ?? 0) + 4
+        color: Qt.alpha(Colors.primary, 0.10)
+        border.color: Colors.primary
+        radius: 3
+    }
+
+    Repeater {
+        model: ["x", "y"]
+
+        Rectangle {
+            required property string modelData
+            readonly property bool horizontal: modelData === "x"
+            visible: root.partBounds !== null && root.partGuideAxis === modelData
+            x: horizontal ? root.partGuidePosition(true) : 0
+            y: horizontal ? 0 : root.partGuidePosition(false)
+            width: horizontal ? 1 : root.width
+            height: horizontal ? root.height : 1
+            color: Colors.primary
+        }
     }
 
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.SizeAllCursor
-        onClicked: root.select()
+        onClicked: mouse => {
+            root.select();
+            root.partTapped(Qt.point(mouse.x, mouse.y));
+        }
     }
 
     DragHandler {
@@ -290,7 +353,7 @@ Item {
             DragHandler {
                 target: null
                 grabPermissions: PointerHandler.CanTakeOverFromAnything
-                onActiveChanged: active ? root.begin() : root.finish()
+                onActiveChanged: active ? root.begin(true) : root.finish()
                 onActiveTranslationChanged: if (active) root.resize(activeTranslation.x, activeTranslation.y, index)
             }
         }

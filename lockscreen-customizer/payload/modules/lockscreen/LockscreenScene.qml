@@ -6,6 +6,7 @@ import qs.modules.theme
 import qs.config
 import "LockscreenPlacement.js" as Placement
 import "LockscreenActions.js" as Actions
+import "LockscreenCustomization.js" as Customization
 import "widgets" as Widgets
 
 Item {
@@ -21,7 +22,9 @@ Item {
     property Item activeEditHandle
     property var shortcutWidgets: ({})
     property bool editing: false
-    property string selectedWidget: settings.clockVisible ? "clock" : "login"
+    property string selectedPart: ""
+    property string partGuideAxis: ""
+    property string selectedWidget: ""
     readonly property var widgetOptions: [
         { key: "clock", title: "Clock" },
         { key: "media", title: "Media player" },
@@ -35,6 +38,7 @@ Item {
     signal layoutEdited(var values)
     signal toolsRequested(string key, Item handle)
     signal widgetInteracted(Item handle)
+    signal partSelected(string widget, string part, Item handle)
     signal contextMenuRequested(point position, string key)
 
     function hasWidget(key) {
@@ -52,7 +56,7 @@ Item {
             layoutEdited({ shortcuts: Actions.setEnabled(Array.from(settings.shortcuts ?? []), key.slice(9), enabled) });
         else
             layoutEdited({ [key + "Visible"]: enabled });
-        selectedWidget = enabled ? key : "login";
+        selectedWidget = enabled ? key : "";
     }
 
     function focusPassword() {
@@ -68,10 +72,56 @@ Item {
                              : Placement.offset(alignment, available, size, 32 * designScale);
     }
 
-    function visualBounds(widget) {
+    function widgetItem(key) {
+        switch (key) {
+        case "clock": return clockContainer;
+        case "media": return playerContainer;
+        case "login": return passwordContainer;
+        case "visualizer": return visualizer;
+        default: return shortcutWidgets[key.slice(9)];
+        }
+    }
+
+    function relativePartBounds(widget, item) {
+        if (!item || !item.visible || item.width <= 0 || item.height <= 0)
+            return null;
+        let x = 0;
+        let y = 0;
+        for (let current = item; current && current !== widget; current = current.parent) {
+            x += current.x + (current.partOffsetX ?? 0);
+            y += current.y + (current.partOffsetY ?? 0);
+        }
+        return Qt.rect(x, y, item.width, item.height);
+    }
+
+    function visualBounds(key, widget) {
         if (activeEditHandle?.widget === widget)
             return activeEditHandle.draft;
-        return Qt.rect(widget.baseX, widget.baseY, widget.baseWidth * widget.baseScale, widget.baseHeight * widget.baseScale);
+
+        const bounds = key === "clock" ? Qt.rect(widget.baseX, widget.baseY, widget.width, widget.height)
+            : Qt.rect(widget.baseX, widget.baseY, widget.baseWidth * widget.baseScale, widget.baseHeight * widget.baseScale);
+        if (!Customization.parts[key])
+            return bounds;
+        const anchor = Customization.read(settings[key + "Anchor"]);
+        if (!anchor.target || !Customization.canAnchor(settings, key, anchor.target))
+            return bounds;
+
+        const screenRect = Qt.rect(0, 0, width, height);
+        let target = screenRect;
+        if (anchor.target !== "screen") {
+            const targetKey = Customization.targetWidget(anchor.target);
+            const targetItem = widgetItem(targetKey);
+            if (!targetItem?.visible)
+                return bounds;
+            target = visualBounds(targetKey, targetItem);
+            if (anchor.target === "avatar") {
+                const avatar = relativePartBounds(targetItem, targetItem.editableParts?.avatar);
+                if (!avatar)
+                    return bounds;
+                target = Qt.rect(target.x + avatar.x, target.y + avatar.y, avatar.width, avatar.height);
+            }
+        }
+        return Customization.place(anchor, target, bounds, screenRect, designScale);
     }
 
     function shortcutFor(id) {
@@ -90,34 +140,30 @@ Item {
         layoutEdited({ shortcuts: next });
     }
 
-    function placeWidget(key, widget, x, y, requestedWidth, requestedHeight) {
+    function placeWidget(key, widget, x, y, requestedWidth, requestedHeight, resizing) {
+        const anchorChange = !resizing && Customization.read(settings[key + "Anchor"]).target
+            ? { [key + "Anchor"]: "{}" } : {};
         if (key === "visualizer") {
-            layoutEdited({
+            layoutEdited(Object.assign(anchorChange, {
                 visualizerWidth: Math.min(1, requestedWidth / Math.max(1, width)),
                 visualizerHeight: Math.min(1, requestedHeight / Math.max(1, height)),
                 visualizerX: x / Math.max(1, width - requestedWidth),
                 visualizerY: y / Math.max(1, height - requestedHeight)
-            });
+            }));
             return;
         }
         if (key.startsWith("shortcut:")) {
             placeShortcut(key.slice(9), widget, x, y, requestedWidth);
             return;
         }
-        const ratio = requestedWidth / Math.max(1, widget.baseWidth * widget.baseScale);
-        const sizeKey = key === "clock" ? "clockSize" : key + "Scale";
-        if (Math.abs(ratio - 1) > 0.001) {
-            const current = settings[sizeKey];
-            const requested = key === "clock" ? current * widget.baseScale * ratio / designScale : 100 * widget.baseScale * ratio;
-            const minimum = key === "clock" ? 32 : key === "login" ? 75 : 65;
-            layoutEdited({ [sizeKey]: Math.round(Math.max(minimum, Math.min(key === "clock" ? 480 : 160, requested))) });
-        }
-        const availableX = Math.max(1, width - widget.baseWidth * widget.baseScale);
-        const availableY = Math.max(1, height - widget.baseHeight * widget.baseScale);
-        layoutEdited({
-            [key + "X"]: Math.max(0, Math.min(1, x / availableX)),
-            [key + "Y"]: Math.max(0, Math.min(1, y / availableY))
-        });
+        const frameSize = key === "clock"
+            ? { scale: requestedWidth / (Math.max(1, widget.naturalWidth) * designScale) }
+            : { width: requestedWidth / designScale, height: requestedHeight / designScale };
+        const frame = resizing ? { [key + "Frame"]: JSON.stringify(frameSize) } : {};
+        layoutEdited(Object.assign(anchorChange, frame, {
+            [key + "X"]: Math.max(0, Math.min(1, x / Math.max(1, width - requestedWidth))),
+            [key + "Y"]: Math.max(0, Math.min(1, y / Math.max(1, height - requestedHeight)))
+        }));
     }
 
     Keys.onEscapePressed: event => {
@@ -159,7 +205,7 @@ Item {
         readonly property real baseScale: 1
         readonly property real baseX: root.coordinate(root.settings.visualizerX, "center", root.width, baseWidth)
         readonly property real baseY: root.coordinate(root.settings.visualizerY, "bottom", root.height, baseHeight)
-        readonly property rect bounds: root.visualBounds(visualizer)
+        readonly property rect bounds: root.visualBounds("visualizer", visualizer)
         x: bounds.x
         y: bounds.y
         width: bounds.width
@@ -172,17 +218,19 @@ Item {
         z: root.activeEditHandle?.widget === clockContainer ? 12 : 10
         settings: root.settings
         visible: root.settings.clockVisible
-        readonly property real baseWidth: designWidth
-        readonly property real baseHeight: designHeight
+        readonly property real baseWidth: naturalWidth
+        readonly property real baseHeight: naturalHeight
         readonly property var position: root.placement(root.settings.clockPosition, "center-center")
-        readonly property real baseScale: Placement.fit(baseWidth, baseHeight, parent.width, parent.height, root.designScale, 32 * root.designScale)
+        readonly property real baseScale: Placement.fit(baseWidth, baseHeight, parent.width, parent.height,
+            root.designScale * requestedScale, Object.keys(savedFrame).length ? 0 : 32 * root.designScale)
         transformOrigin: Item.TopLeft
-        readonly property real baseX: root.coordinate(root.settings.clockX, position[1], parent.width, baseWidth * baseScale)
-        readonly property real baseY: root.coordinate(root.settings.clockY, position[0], parent.height, baseHeight * baseScale)
-        readonly property rect bounds: root.visualBounds(clockContainer)
+        readonly property real baseX: root.coordinate(root.settings.clockX, position[1], parent.width, width)
+        readonly property real baseY: root.coordinate(root.settings.clockY, position[0], parent.height, height)
+        readonly property rect bounds: root.visualBounds("clock", clockContainer)
         x: bounds.x
         y: bounds.y
-        renderScale: bounds.width / Math.max(1, baseWidth)
+        renderScale: root.activeEditHandle?.widget === clockContainer && root.activeEditHandle.resizing
+            ? root.activeEditHandle.draft.width / Math.max(1, naturalWidth) : baseScale
 
     }
 
@@ -190,16 +238,27 @@ Item {
         id: playerContainer
         z: root.activeEditHandle?.widget === playerContainer ? 12 : 10
         readonly property var position: root.placement(root.settings.mediaPosition, root.settings.position + "-left")
+        readonly property var editableParts: playerContent.editableParts
+        readonly property real renderScale: playerContent.renderScale
+        readonly property bool artworkAbove: playerContent.artworkAbove
         readonly property real baseWidth: playerContent.designWidth
-        readonly property real baseHeight: playerContent.designHeight
+        readonly property real baseHeight: hasSavedFrame
+            ? resizeHeight(baseWidth * root.designScale, playerContent.designHeight * root.designScale) / root.designScale
+            : playerContent.designHeight
+
+        function resizeHeight(frameWidth, frameHeight) {
+            return Math.min(root.height, playerContent.heightForFrame(frameWidth, frameHeight, preferredScale));
+        }
         width: playerContent.width
         height: playerContent.height
+        readonly property real preferredScale: root.designScale * Math.max(65, Math.min(160, root.settings.mediaScale)) / 100
+        readonly property bool hasSavedFrame: Object.keys(playerContent.savedFrame).length > 0
         readonly property real baseScale: Placement.fit(baseWidth, baseHeight, parent.width, parent.height,
-            root.designScale * Math.max(65, Math.min(160, root.settings.mediaScale)) / 100, 32 * root.designScale)
+            hasSavedFrame ? root.designScale : preferredScale, hasSavedFrame ? 0 : 32 * root.designScale)
         transformOrigin: Item.TopLeft
         readonly property real baseX: root.coordinate(root.settings.mediaX, position[1], parent.width, baseWidth * baseScale)
         readonly property real baseY: root.coordinate(root.settings.mediaY, position[0], parent.height, baseHeight * baseScale)
-        readonly property rect bounds: root.visualBounds(playerContainer)
+        readonly property rect bounds: root.visualBounds("media", playerContainer)
         x: bounds.x
         y: bounds.y
         visible: root.settings.mediaVisible
@@ -207,7 +266,12 @@ Item {
         Widgets.LockscreenMedia {
             id: playerContent
             settings: root.settings
-            renderScale: Math.max(0.01, playerContainer.bounds.width / designWidth)
+            frameSize: playerContainer.hasSavedFrame || root.activeEditHandle?.widget === playerContainer && root.activeEditHandle.resizing
+                ? Qt.size(playerContainer.bounds.width, playerContainer.bounds.height) : Qt.size(0, 0)
+            renderScale: customFrame ? Math.max(0.01, Math.min(playerContainer.preferredScale,
+                frameSize.width / 234, frameSize.height / (minimumContentHeight
+                    + (preferredArtworkAbove && hasFrontArtwork ? 85 : 32))))
+                : playerContainer.baseScale
             sample: root.preview
         }
     }
@@ -219,17 +283,22 @@ Item {
         username: root.username
         authenticating: root.authenticating
         animate: !root.preview
-        renderScale: Math.max(0.01, bounds.width / baseWidth)
+        frameSize: hasSavedFrame || root.activeEditHandle?.widget === passwordContainer && root.activeEditHandle.resizing
+            ? Qt.size(bounds.width, bounds.height) : Qt.size(0, 0)
+        renderScale: customFrame ? Math.max(0.01, Math.min(preferredScale,
+            frameSize.width / 190, frameSize.height / (presetPortraitAbove ? 124 : titleCard ? 112 : 78))) : baseScale
         readonly property real baseWidth: designWidth
         readonly property real baseHeight: designHeight
         interactive: !root.editing && !root.miniature
         readonly property var position: root.placement(root.settings.loginPosition, root.settings.position + "-center")
+        readonly property real preferredScale: root.designScale * Math.max(75, Math.min(160, root.settings.loginScale)) / 100
+        readonly property bool hasSavedFrame: Object.keys(savedFrame).length > 0
         readonly property real baseScale: Placement.fit(baseWidth, baseHeight, parent.width, parent.height,
-            root.designScale * Math.max(75, Math.min(160, root.settings.loginScale)) / 100, 32 * root.designScale)
+            hasSavedFrame ? root.designScale : preferredScale, hasSavedFrame ? 0 : 32 * root.designScale)
         transformOrigin: Item.TopLeft
         readonly property real baseX: root.coordinate(root.settings.loginX, position[1], parent.width, baseWidth * baseScale)
         readonly property real baseY: root.coordinate(root.settings.loginY, position[0], parent.height, baseHeight * baseScale)
-        readonly property rect bounds: root.visualBounds(passwordContainer)
+        readonly property rect bounds: root.visualBounds("login", passwordContainer)
         x: bounds.x
         y: bounds.y
 
@@ -257,7 +326,7 @@ Item {
                 root.designScale * Math.max(50, Math.min(200, placement?.scale ?? 100)) / 100, 32 * root.designScale)
             readonly property real baseX: root.coordinate(placement?.x ?? 0, "left", root.width, baseWidth * baseScale)
             readonly property real baseY: root.coordinate(placement?.y ?? 0, "top", root.height, baseHeight * baseScale)
-            readonly property rect bounds: root.visualBounds(shortcutButton)
+            readonly property rect bounds: root.visualBounds("shortcut:" + modelData.id, shortcutButton)
             shortcutAction: modelData
             usable: !root.preview && !root.authenticating && visible
             visible: placement !== undefined
@@ -323,12 +392,14 @@ Item {
         sourceComponent: Item {
             id: editorLayer
             readonly property var widgets: root.widgetOptions.map(option => {
-                const widget = option.key === "clock" ? clockContainer
-                    : option.key === "media" ? playerContainer
-                    : option.key === "login" ? passwordContainer
-                    : option.key === "visualizer" ? visualizer : root.shortcutWidgets[option.key.slice(9)];
+                const widget = root.widgetItem(option.key);
                 return { key: option.key, title: option.title, widget };
             }).filter(entry => entry.widget)
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.selectedWidget = ""
+            }
 
             TapHandler {
                 acceptedButtons: Qt.RightButton
@@ -337,7 +408,7 @@ Item {
                     const hits = editorLayer.widgets.filter(entry => {
                         if (!entry.widget.visible)
                             return false;
-                        const bounds = root.visualBounds(entry.widget);
+                        const bounds = root.visualBounds(entry.key, entry.widget);
                         return position.x >= bounds.x && position.x <= bounds.x + bounds.width
                             && position.y >= bounds.y && position.y <= bounds.y + bounds.height;
                     });
@@ -373,22 +444,43 @@ Item {
                     siblings: editorLayer.widgets.filter(entry => entry.key !== modelData.key
                         && entry.widget.visible).map(entry => entry.widget)
                     title: modelData.title
+                    targetBounds: root.visualBounds(modelData.key, widget)
                     selected: root.selectedWidget === modelData.key
+                    partBounds: selected && root.selectedPart && !moving
+                        ? root.relativePartBounds(widget, widget.editableParts?.[root.selectedPart]) : null
+                    partGuideAxis: selected && modelData.key === "clock" ? root.partGuideAxis : ""
+                    partGuideValue: partGuideAxis ? widget.editableParts?.[root.selectedPart]?.[partGuideAxis + "Position"] ?? 0 : 0
+                    adjustHeight: modelData.key === "media" ? (w, h) => widget.resizeHeight(w, h) : null
                     z: selected ? 1 : 0
                     toolsAvailable: !modelData.key.startsWith("shortcut:")
                     onSelect: {
                         root.selectedWidget = modelData.key;
                         root.widgetInteracted(handle);
                     }
-                    onToolsRequested: root.toolsRequested(modelData.key, handle)
+                    onPartTapped: position => {
+                        for (const [key, item] of Object.entries(widget.editableParts ?? {})) {
+                            const rect = root.relativePartBounds(widget, item);
+                            if (rect && position.x >= rect.x && position.x <= rect.x + rect.width
+                                    && position.y >= rect.y && position.y <= rect.y + rect.height) {
+                                root.partSelected(modelData.key, key, handle);
+                                break;
+                            }
+                        }
+                    }
+                    onToolsRequested: {
+                        root.selectedWidget = modelData.key;
+                        root.toolsRequested(modelData.key, handle);
+                    }
                     onMovingChanged: {
                         if (moving)
                             root.activeEditHandle = handle;
                         else if (root.activeEditHandle === handle)
                             root.activeEditHandle = null;
                     }
-                    freeResize: modelData.key === "visualizer"
-                    onDone: (x, y, width, height) => root.placeWidget(modelData.key, widget, x, y, width, height)
+                    freeResize: modelData.key !== "clock" && !modelData.key.startsWith("shortcut:")
+                    minimumWidth: root.designScale * ({ media: 210, login: 168, clock: 28 }[modelData.key] ?? 36)
+                    minimumHeight: root.designScale * ({ media: 76, login: 58, clock: 34 }[modelData.key] ?? 36)
+                    onDone: (x, y, width, height, resizing) => root.placeWidget(modelData.key, widget, x, y, width, height, resizing)
                 }
             }
         }
