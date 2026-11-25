@@ -84,6 +84,70 @@ def video_thumbnail(path, library, relative, generate, width=360):
     return frame.as_uri() if frame.is_file() else ""
 
 
+def prepare_playback(path, directory, long_edge, short_edge):
+    if path.suffix.lower() == ".gif" or not shutil.which("ffprobe") or not shutil.which("ffmpeg"):
+        return ""
+
+    revision = path.stat()
+    key = hashlib.sha256(f"v2:{path.resolve()}:{revision.st_mtime_ns}:{revision.st_size}:{long_edge}:{short_edge}".encode()).hexdigest()
+    target = directory / f"{key}.mp4"
+    if not target.is_file():
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+             "-of", "csv=p=0:s=x", str(path)],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        dimensions = probe.stdout.strip().split("x")
+        if probe.returncode or len(dimensions) != 2 or not all(value.isdecimal() for value in dimensions):
+            return ""
+        width, height = map(int, dimensions)
+        limit_width, limit_height = (long_edge, short_edge) if width >= height else (short_edge, long_edge)
+        if width <= limit_width and height <= limit_height:
+            return ""
+
+        directory.mkdir(parents=True, exist_ok=True)
+        with NamedTemporaryFile(dir=directory, suffix=".mp4") as temporary:
+            result = subprocess.run(
+                ["ffmpeg", "-nostdin", "-v", "error", "-y", "-threads", "2", "-filter_threads", "2", "-i", str(path),
+                 "-map", "0:v:0", "-an", "-sn", "-dn",
+                 "-vf", f"scale={limit_width}:{limit_height}:force_original_aspect_ratio=decrease:force_divisible_by=2",
+                 "-c:v", "libx264", "-preset", "veryfast", "-tune", "fastdecode", "-threads", "2", "-crf", "22",
+                 "-maxrate", "12M", "-bufsize", "18M", "-g", "60", "-pix_fmt", "yuv420p",
+                 "-movflags", "+faststart", temporary.name],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90, check=False,
+            )
+            if result.returncode != 0 or not Path(temporary.name).stat().st_size:
+                return ""
+            try:
+                target.hardlink_to(temporary.name)
+            except FileExistsError:
+                pass
+    os.utime(target)
+    entries = sorted(directory.glob("[0-9a-f]" * 64 + ".mp4"), key=lambda entry: entry.stat().st_mtime_ns, reverse=True)
+    for entry in entries[3:]:
+        if entry != target:
+            entry.unlink(missing_ok=True)
+    return target.as_uri()
+
+
+def prepare_video(url, library, playback):
+    parts = urlsplit(url)
+    source = Path(unquote(parts.path)) if parts.scheme == "file" and not parts.netloc else None
+    if source is None or not source.is_file() or source.suffix.lower() not in VIDEOS:
+        return
+    os.nice(10)
+    try:
+        thumbnail = video_thumbnail(source, library, source.resolve(), True, width=1280)
+        if thumbnail:
+            print(json.dumps({"url": url, "thumbnail": thumbnail}), flush=True)
+        directory, long_edge, short_edge = playback
+        prepared = prepare_playback(source, Path(directory), int(long_edge), int(short_edge))
+        if prepared:
+            print(json.dumps({"url": url, "playback": prepared}), flush=True)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def list_wallpapers(library, desktop, desktop_thumbnails, imported):
     entries = []
     seen = set()
@@ -120,6 +184,8 @@ def main():
     parser.add_argument("library", type=Path)
     parser.add_argument("samples", type=Path)
     parser.add_argument("--preview-url")
+    parser.add_argument("--prepare-video")
+    parser.add_argument("--playback", nargs=3, metavar=("CACHE", "LONG", "SHORT"))
     parser.add_argument("--desktop", type=Path)
     parser.add_argument("--desktop-thumbnails", type=Path)
     parser.add_argument("files", nargs="*")
@@ -127,6 +193,11 @@ def main():
 
     library = args.library.absolute()
     library.mkdir(parents=True, exist_ok=True)
+    if args.prepare_video:
+        if args.playback is None:
+            parser.error("--prepare-video requires --playback")
+        prepare_video(args.prepare_video, library, args.playback)
+        return
     if args.preview_url:
         thumbnail = ""
         parts = urlsplit(args.preview_url)

@@ -455,10 +455,12 @@ diff --git a/shell.qml b/shell.qml
 index 16826c1c4e72eb8f625deba463fb2fd0c8319ed5..af6934326f615cbee94dd6977d9dae6ac95080f4 100644
 --- a/shell.qml
 +++ b/shell.qml
-@@ -172,3 +172,3 @@
+@@ -172,3 +172,5 @@
          // Surface auto-created per screen
 -        LockScreen {}
-+        CustomizedLockScreen {}
++        property var videoCache: LockscreenVideoCache { id: lockscreenVideoCache }
++
++        CustomizedLockScreen { videoCache: lockscreenVideoCache }
      }
 diff --git a/modules/widgets/config/SettingsWindow.qml b/modules/widgets/config/SettingsWindow.qml
 index 67993a5f6220f114894d4fa696c802127c0f86b6..261a155d88173dfa04a1c9b4933225110b4b2a3c 100644

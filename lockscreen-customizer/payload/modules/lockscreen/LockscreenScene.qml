@@ -19,6 +19,9 @@ Item {
     property bool miniature: false
     property real designScale: 1
     property url videoPoster
+    property url preparedVideo
+    property var videoCache
+    property bool suspending: false
     property Item activeEditHandle
     property var shortcutWidgets: ({})
     property bool editing: false
@@ -187,17 +190,19 @@ Item {
         anchors.fill: parent
         screen: root.screen
         settings: root.settings
-        preview: root.preview
         miniature: root.miniature
         designScale: root.designScale
         videoPoster: root.videoPoster
+        preparedVideo: root.preparedVideo
+        videoCache: root.videoCache
+        playbackEnabled: !root.suspending
     }
 
     Widgets.LockscreenVisualizer {
         id: visualizer
         settings: root.settings
         visible: root.settings.visualizerVisible
-        captureAudio: !root.miniature
+        captureAudio: !root.miniature && !root.suspending
         sample: root.miniature
         pixelScale: Math.max(0.01, root.designScale)
         readonly property real baseWidth: Math.max(0, Math.min(root.width, root.width * root.settings.visualizerWidth))

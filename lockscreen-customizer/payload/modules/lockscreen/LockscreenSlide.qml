@@ -17,11 +17,15 @@ Rectangle {
     clip: true
     color: opaqueUnderlay ? Colors.surfaceContainer : "transparent"
 
-    function enter() {
-        if (started)
+    function enter(immediate = false) {
+        if (exit.running || (started && !immediate))
             return;
+        if (immediate) {
+            entry.stop();
+            sheet.offset = 0;
+        }
         started = true;
-        if (duration > 0)
+        if (!immediate && duration > 0)
             entry.start();
     }
 
@@ -40,6 +44,7 @@ Rectangle {
         sourceSize: Qt.size(Math.max(1, Math.round(width * (Screen.devicePixelRatio || 1))),
                             Math.max(1, Math.round(height * (Screen.devicePixelRatio || 1))))
         fillMode: Image.PreserveAspectCrop
+        asynchronous: true
         mipmap: true
         visible: status === Image.Ready
     }

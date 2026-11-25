@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Services.Pam
 import Quickshell.Wayland
 import qs.modules.globals
+import qs.modules.services
 import qs.modules.theme
 import qs.config
 
@@ -11,6 +12,8 @@ WlSessionLockSurface {
     id: root
 
     property bool authenticating: false
+    property var videoCache
+    readonly property bool sleepTransition: SuspendManager.isSuspending || !SuspendManager.wakeReady
 
     color: Colors.surfaceContainer
 
@@ -19,6 +22,8 @@ WlSessionLockSurface {
         anchors.fill: parent
         duration: Config.animDuration > 0 ? Math.max(180, Math.min(600, Config.animDuration * 2)) : 0
         desktopPath: {
+            if (root.sleepTransition)
+                return "";
             const manager = root.screen ? GlobalStates.wallpaperForScreen(root.screen.name) : GlobalStates.wallpaperManager;
             const path = manager?.effectiveWallpaper || manager?.currentWallpaper || "";
             return manager?.getLockscreenFramePath ? manager.getLockscreenFramePath(path) : path;
@@ -30,6 +35,10 @@ WlSessionLockSurface {
             anchors.fill: parent
             screen: root.screen
             authenticating: root.authenticating
+            videoCache: root.videoCache
+            preparedVideo: root.videoCache?.playback ?? ""
+            videoPoster: root.videoCache?.poster ?? ""
+            suspending: SuspendManager.isSuspending
             username: Quickshell.env("USER") || "Enter password"
 
             onHasCustomBackgroundChanged: {
@@ -50,9 +59,9 @@ WlSessionLockSurface {
         }
     }
 
-    function showLockscreen() {
+    function showLockscreen(immediate = false) {
         entryDelay.stop();
-        slide.enter();
+        slide.enter(immediate);
         scene.focusPassword();
     }
 
@@ -60,6 +69,12 @@ WlSessionLockSurface {
         id: entryDelay
         interval: scene.customWallpaper && !scene.hasCustomBackground && slide.duration > 0 ? 280 : 1
         onTriggered: root.showLockscreen()
+    }
+
+    Connections {
+        target: SuspendManager
+        function onPreparingForSleep() { root.showLockscreen(true); }
+        function onWakingUp() { root.showLockscreen(true); }
     }
 
     QtObject {
@@ -99,5 +114,10 @@ WlSessionLockSurface {
         }
     }
 
-    Component.onCompleted: entryDelay.start()
+    Component.onCompleted: {
+        if (sleepTransition)
+            showLockscreen(true);
+        else
+            entryDelay.start();
+    }
 }

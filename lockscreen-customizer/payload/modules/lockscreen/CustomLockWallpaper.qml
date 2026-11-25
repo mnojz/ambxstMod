@@ -11,6 +11,8 @@ Item {
     required property bool playing
     property bool miniature: false
     property url poster
+    property url preparedVideo
+    property var videoCache
     property var settings: Config.customLockscreen
     readonly property bool isVideo: settings.wallpaperMode === "video"
     readonly property var images: settings.wallpaperImages
@@ -26,7 +28,7 @@ Item {
     Image {
         id: still
         anchors.fill: parent
-        source: root.isVideo ? (!root.motionReady ? root.poster : "") : Placement.localUrl(root.settings.wallpaperMode === "slideshow"
+        source: root.isVideo ? root.poster : Placement.localUrl(root.settings.wallpaperMode === "slideshow"
             ? root.images[root.imageIndex % Math.max(1, root.images.length)] : root.settings.wallpaperImage)
         asynchronous: true
         fillMode: Image.PreserveAspectCrop
@@ -53,19 +55,32 @@ Item {
         id: videoLoader
         anchors.fill: parent
         active: root.playMotion && !root.gif
+        asynchronous: true
         sourceComponent: Item {
             id: playback
-            readonly property bool hasFrame: player.hasVideo && output.sourceRect.width > 0
-                                             && player.mediaStatus !== MediaPlayer.InvalidMedia
+            property bool borrowed: false
+            property bool useLocal: false
+            readonly property bool hasFrame: output.sourceRect.width > 0
+                && (borrowed || player.mediaStatus !== MediaPlayer.InvalidMedia)
 
             function playSource() {
+                if (borrowed)
+                    root.videoCache.release(output);
+                useLocal = false;
                 player.stop();
-                player.source = root.videoUrl;
-                if (root.videoUrl)
+                borrowed = root.videoCache?.acquire(output, root.videoUrl) ?? false;
+                if (!borrowed && root.videoUrl) {
+                    useLocal = true;
+                    player.source = root.preparedVideo.toString() || root.videoUrl;
                     player.play();
+                }
             }
 
             Component.onCompleted: playSource()
+            Component.onDestruction: {
+                if (borrowed)
+                    root.videoCache?.release(output);
+            }
 
             Connections {
                 target: root
@@ -82,7 +97,7 @@ Item {
 
             MediaPlayer {
                 id: player
-                videoOutput: output
+                videoOutput: playback.useLocal ? output : null
                 loops: MediaPlayer.Infinite
                 activeAudioTrack: -1
             }

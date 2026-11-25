@@ -11,10 +11,12 @@ Item {
 
     required property var settings
     property var screen
-    property bool preview: false
     property bool miniature: false
     property real designScale: 1
     property url videoPoster
+    property url preparedVideo
+    property var videoCache
+    property bool playbackEnabled: true
 
     readonly property var wallpaperManager: screen ? GlobalStates.wallpaperForScreen(screen.name) : GlobalStates.wallpaperManager
     readonly property bool customWallpaper: ["image", "slideshow", "video"].includes(settings.wallpaperMode)
@@ -38,7 +40,7 @@ Item {
         readonly property size blurTextureSize: Qt.size(Math.max(1, Math.round(width * textureScale)),
                                                          Math.max(1, Math.round(height * textureScale)))
 
-        layer.enabled: blurSigma > 0
+        layer.enabled: blurSigma > 0 && (!root.customWallpaper || customLoader.ready)
         layer.smooth: true
         layer.textureSize: blurTextureSize
         layer.effect: ShaderEffect {
@@ -80,9 +82,11 @@ Item {
 
                 sourceComponent: CustomLockWallpaper {
                     settings: root.settings
-                    playing: true
+                    playing: root.playbackEnabled
                     miniature: root.miniature
                     poster: root.videoPoster
+                    preparedVideo: root.preparedVideo
+                    videoCache: root.videoCache
                 }
             }
 
@@ -93,7 +97,7 @@ Item {
                 radius: 0
                 tintEnabled: root.settings.wallpaperTint
                 source: {
-                    if (customLoader.ready || (root.preview && root.customWallpaper))
+                    if (root.customWallpaper)
                         return "";
                     const manager = root.wallpaperManager;
                     return Placement.fileUrl(manager?.effectiveWallpaper || manager?.currentWallpaper || "");
@@ -104,7 +108,7 @@ Item {
                         root.syncLockscreenVideo();
                 }
 
-                visible: !customLoader.ready && !(root.preview && root.customWallpaper)
+                visible: !root.customWallpaper
 
             }
 
