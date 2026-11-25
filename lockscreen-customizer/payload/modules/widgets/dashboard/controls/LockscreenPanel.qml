@@ -11,6 +11,7 @@ import Quickshell.Widgets
 import qs.config
 import qs.modules.globals
 import qs.modules.lockscreen
+import "../../../../modules/lockscreen/widgets" as Widgets
 import qs.modules.theme
 import "../../../../config/defaults/lockscreen.js" as Defaults
 import "../../../../modules/lockscreen/LockscreenPlacement.js" as Placement
@@ -1153,7 +1154,7 @@ Control {
                                 id: clockSample
 
                                 Item {
-                                    LockscreenClock {
+                                    Widgets.LockscreenClock {
                                         anchors.centerIn: parent
                                         settings: !preset.modelData.builtin ? sample.settings : Object.assign({}, sample.settings, {
                                             clockSize: preset.modelData.sampleSize, clockSeconds: false, clockGreeting: false, clockFormat: "24h",
@@ -1170,7 +1171,7 @@ Control {
                                 id: mediaSample
 
                                 Item {
-                                    LockscreenMedia {
+                                    Widgets.LockscreenMedia {
                                         anchors.centerIn: parent
                                         settings: sample.settings
                                         sample: true
@@ -1184,7 +1185,7 @@ Control {
                                 id: visualizerSample
 
                                 Item {
-                                    LockscreenVisualizer {
+                                    Widgets.LockscreenVisualizer {
                                         anchors.fill: parent
                                         anchors.margins: 8
                                         settings: sample.settings
@@ -1197,7 +1198,7 @@ Control {
                                 id: loginSample
 
                                 Item {
-                                    LockscreenLogin {
+                                    Widgets.LockscreenLogin {
                                         anchors.centerIn: parent
                                         settings: sample.settings
                                         interactive: false

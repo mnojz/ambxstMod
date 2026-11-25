@@ -1,13 +1,12 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
-import qs.modules.components
 import qs.modules.corners
 import qs.modules.theme
-import qs.modules.globals
 import qs.config
 import "LockscreenPlacement.js" as Placement
 import "LockscreenActions.js" as Actions
+import "widgets" as Widgets
 
 Item {
     id: root
@@ -129,169 +128,26 @@ Item {
     }
 
     property var settings: Config.customLockscreen
-    readonly property bool waitingForVideo: miniature && settings.wallpaperMode === "video"
-        && Boolean(settings.wallpaperVideo) && !customLoader.ready
-    readonly property bool hasCustomBackground: customLoader.ready
-    readonly property bool customWallpaper: ["image", "slideshow", "video"].includes(settings.wallpaperMode)
+    readonly property alias waitingForVideo: wallpaper.waitingForVideo
+    readonly property alias hasCustomBackground: wallpaper.hasCustomBackground
+    readonly property alias customWallpaper: wallpaper.customWallpaper
 
     function placement(value, fallback) {
         return (value === "legacy" ? fallback : value).split("-");
     }
 
-    Item {
-        id: backgroundLayer
+    LockscreenWallpaper {
+        id: wallpaper
         anchors.fill: parent
-
-        Rectangle {
-            anchors.fill: parent
-            color: Colors.background
-        }
-        clip: true
-        readonly property real blurAmount: Math.max(0, Math.min(100, root.settings.wallpaperBlur)) / 100
-        readonly property real blurSigma: 15 * blurAmount * root.designScale
-        // As the blur broadens, the blurred image needs fewer pixels to retain its detail.
-        readonly property real textureScale: Math.min(Screen.devicePixelRatio || 1, 8 / Math.max(1, blurSigma))
-        readonly property size blurTextureSize: Qt.size(Math.max(1, Math.round(width * textureScale)),
-                                                         Math.max(1, Math.round(height * textureScale)))
-
-        layer.enabled: blurSigma > 0
-        layer.smooth: true
-        layer.textureSize: blurTextureSize
-        layer.effect: ShaderEffect {
-            property var source
-            readonly property vector2d texelStep: Qt.vector2d(0, 1 / backgroundLayer.blurTextureSize.height)
-            readonly property real sigma: backgroundLayer.blurSigma * backgroundLayer.blurTextureSize.height / Math.max(1, height)
-            fragmentShader: "wallpaper-gaussian.frag.qsb"
-        }
-
-        Item {
-            anchors.fill: parent
-            clip: true
-            layer.enabled: backgroundLayer.layer.enabled
-            layer.smooth: true
-            layer.textureSize: backgroundLayer.blurTextureSize
-            layer.effect: ShaderEffect {
-                property var source
-                readonly property vector2d texelStep: Qt.vector2d(1 / backgroundLayer.blurTextureSize.width, 0)
-                readonly property real sigma: backgroundLayer.blurSigma * backgroundLayer.blurTextureSize.width / Math.max(1, width)
-                fragmentShader: "wallpaper-gaussian.frag.qsb"
-            }
-
-            Loader {
-                id: customLoader
-                anchors.fill: parent
-                z: 2
-                active: root.customWallpaper
-                readonly property bool ready: item?.ready ?? false
-
-                layer.enabled: ready && root.settings.wallpaperTint
-                layer.effect: ShaderEffect {
-                    property var paletteTexture: tintPalette
-                    property real paletteSize: wallpaperBackground.optimizedPalette.length
-                    property real texWidth: customLoader.width
-                    property real texHeight: customLoader.height
-                    vertexShader: "../widgets/dashboard/wallpapers/palette.vert.qsb"
-                    fragmentShader: "../widgets/dashboard/wallpapers/palette.frag.qsb"
-                }
-
-                sourceComponent: CustomLockWallpaper {
-                    settings: root.settings
-                    playing: true
-                    miniature: root.miniature
-                    poster: root.videoPoster
-                }
-            }
-
-            TintedWallpaper {
-                id: wallpaperBackground
-                anchors.fill: parent
-                z: 1
-                radius: 0
-                tintEnabled: root.settings.wallpaperTint
-                source: {
-                    if (customLoader.ready || (root.preview && root.customWallpaper))
-                        return "";
-                    const manager = root.backgroundWallpaper();
-                    return Placement.fileUrl(manager?.effectiveWallpaper || manager?.currentWallpaper || "");
-                }
-
-                onSourceChanged: {
-                    if (!root.miniature)
-                        root.syncLockscreenVideo();
-                }
-
-                visible: !customLoader.ready && !(root.preview && root.customWallpaper)
-
-            }
-
-        }
+        screen: root.screen
+        settings: root.settings
+        preview: root.preview
+        miniature: root.miniature
+        designScale: root.designScale
+        videoPoster: root.videoPoster
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: "black"
-        opacity: Math.max(0, Math.min(100, root.settings.wallpaperDim ?? 0)) / 100
-        visible: opacity > 0
-    }
-
-    ShaderEffectSource {
-        id: tintPalette
-        visible: false
-        hideSource: true
-        smooth: false
-        sourceItem: Row {
-            Repeater {
-                model: customLoader.layer.enabled ? wallpaperBackground.optimizedPalette : []
-                delegate: Rectangle {
-                    required property string modelData
-                    width: 1
-                    height: 1
-                    color: Colors[modelData]
-                }
-            }
-        }
-    }
-
-    function backgroundWallpaper() {
-        return root.screen ? GlobalStates.wallpaperForScreen(root.screen.name) : GlobalStates.wallpaperManager;
-    }
-
-    function syncLockscreenVideo() {
-        if (!wallpaperBackground.isVideo)
-            return;
-        var wp = backgroundWallpaper();
-        var targetPos = (wp && wp.activeVideo) ? wp.activeVideo.positionMs : 0;
-        wallpaperBackground.videoPlayAt(targetPos);
-    }
-
-    // Follow the background video while locked (seek to 0 on wallpaper sync)
-    Connections {
-        target: root.miniature ? null : GlobalStates
-        function onVideoSyncTickChanged() {
-            if (!wallpaperBackground.isVideo)
-                return;
-            wallpaperBackground.videoSeek(0);
-            wallpaperBackground.videoPlay();
-        }
-    }
-
-    // Soft drift correction against the background video
-    Timer {
-
-        interval: 15000
-        running: !root.miniature && wallpaperBackground.isVideo
-        repeat: true
-        onTriggered: {
-            var wp = backgroundWallpaper();
-            if (!wp || !wp.activeVideo || !wallpaperBackground.isVideo)
-                return;
-            var diff = Math.abs(wallpaperBackground.videoPosition - wp.activeVideo.positionMs);
-            if (diff > 1500)
-                wallpaperBackground.videoSeek(wp.activeVideo.positionMs);
-        }
-    }
-
-    LockscreenVisualizer {
+    Widgets.LockscreenVisualizer {
         id: visualizer
         settings: root.settings
         visible: root.settings.visualizerVisible
@@ -311,7 +167,7 @@ Item {
         z: root.activeEditHandle?.widget === visualizer ? 12 : 9
     }
 
-    LockscreenClock {
+    Widgets.LockscreenClock {
         id: clockContainer
         z: root.activeEditHandle?.widget === clockContainer ? 12 : 10
         settings: root.settings
@@ -348,8 +204,7 @@ Item {
         y: bounds.y
         visible: root.settings.mediaVisible
 
-
-        LockscreenMedia {
+        Widgets.LockscreenMedia {
             id: playerContent
             settings: root.settings
             renderScale: Math.max(0.01, playerContainer.bounds.width / designWidth)
@@ -357,7 +212,7 @@ Item {
         }
     }
 
-    LockscreenLogin {
+    Widgets.LockscreenLogin {
         id: passwordContainer
         z: root.activeEditHandle?.widget === passwordContainer ? 12 : 11
         settings: root.settings
@@ -392,7 +247,7 @@ Item {
     Repeater {
         model: Actions.available
 
-        delegate: LockscreenShortcut {
+        delegate: Widgets.LockscreenShortcut {
             id: shortcutButton
             required property var modelData
             readonly property var placement: root.shortcutFor(modelData.id)

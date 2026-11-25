@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "mnojz.lockscreen-customizer",
   "name": "Lock Screen Customizer",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "Adds lock screen customization for wallpapers, clock, media player, login, and an audio visualizer.",
   "author": "mnojz",
   "compatibility": {
@@ -59,13 +59,13 @@
     },
     {
       "type": "overlay",
-      "source": "payload/modules/lockscreen/LockscreenClockFace.qml",
-      "target": "modules/lockscreen/LockscreenClockFace.qml"
+      "source": "payload/modules/lockscreen/widgets/LockscreenClockFace.qml",
+      "target": "modules/lockscreen/widgets/LockscreenClockFace.qml"
     },
     {
       "type": "overlay",
-      "source": "payload/modules/lockscreen/LockscreenWidgetShadow.qml",
-      "target": "modules/lockscreen/LockscreenWidgetShadow.qml"
+      "source": "payload/modules/lockscreen/widgets/LockscreenWidgetShadow.qml",
+      "target": "modules/lockscreen/widgets/LockscreenWidgetShadow.qml"
     },
     {
       "type": "overlay",
@@ -74,18 +74,18 @@
     },
     {
       "type": "overlay",
-      "source": "payload/modules/lockscreen/LockscreenClock.qml",
-      "target": "modules/lockscreen/LockscreenClock.qml"
+      "source": "payload/modules/lockscreen/widgets/LockscreenClock.qml",
+      "target": "modules/lockscreen/widgets/LockscreenClock.qml"
     },
     {
       "type": "overlay",
-      "source": "payload/modules/lockscreen/LockscreenLogin.qml",
-      "target": "modules/lockscreen/LockscreenLogin.qml"
+      "source": "payload/modules/lockscreen/widgets/LockscreenLogin.qml",
+      "target": "modules/lockscreen/widgets/LockscreenLogin.qml"
     },
     {
       "type": "overlay",
-      "source": "payload/modules/lockscreen/LockscreenMedia.qml",
-      "target": "modules/lockscreen/LockscreenMedia.qml"
+      "source": "payload/modules/lockscreen/widgets/LockscreenMedia.qml",
+      "target": "modules/lockscreen/widgets/LockscreenMedia.qml"
     },
     {
       "type": "overlay",
@@ -104,8 +104,8 @@
     },
     {
       "type": "overlay",
-      "source": "payload/modules/lockscreen/LockscreenShortcut.qml",
-      "target": "modules/lockscreen/LockscreenShortcut.qml"
+      "source": "payload/modules/lockscreen/widgets/LockscreenShortcut.qml",
+      "target": "modules/lockscreen/widgets/LockscreenShortcut.qml"
     },
     {
       "type": "overlay",
@@ -114,13 +114,38 @@
     },
     {
       "type": "overlay",
-      "source": "payload/modules/lockscreen/LockscreenVisualizer.qml",
-      "target": "modules/lockscreen/LockscreenVisualizer.qml"
+      "source": "payload/modules/lockscreen/widgets/LockscreenVisualizer.qml",
+      "target": "modules/lockscreen/widgets/LockscreenVisualizer.qml"
     },
     {
       "type": "overlay",
       "source": "payload/scripts/lockscreen_spectrum.py",
       "target": "scripts/lockscreen_spectrum.py"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/LockscreenWallpaper.qml",
+      "target": "modules/lockscreen/LockscreenWallpaper.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/widgets/qmldir",
+      "target": "modules/lockscreen/widgets/qmldir"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/widgets/LockscreenSpectrum.qml",
+      "target": "modules/lockscreen/widgets/LockscreenSpectrum.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/widgets/MediaButton.qml",
+      "target": "modules/lockscreen/widgets/MediaButton.qml"
+    },
+    {
+      "type": "overlay",
+      "source": "payload/modules/lockscreen/widgets/MediaPlayerSelector.qml",
+      "target": "modules/lockscreen/widgets/MediaPlayerSelector.qml"
     },
     {
       "type": "patch",

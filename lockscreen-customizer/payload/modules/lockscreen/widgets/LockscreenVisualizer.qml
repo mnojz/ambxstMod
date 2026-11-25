@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import Quickshell.Io
 import qs.modules.theme
 
 Item {
@@ -11,11 +10,9 @@ Item {
     property bool captureAudio: false
     property bool sample: false
     property real pixelScale: 1
-    property var spectrum: []
-    property real peak: 0
+    readonly property var spectrum: LockscreenSpectrum.bands
     readonly property color graphColor: settings.visualizerUseShellColors ? Colors.primary : settings.visualizerColor
-    readonly property int bandsPerChannel: 96
-    readonly property int bandCount: 2 * bandsPerChannel
+    readonly property int bandsPerChannel: LockscreenSpectrum.bandCount / 2
     readonly property var waveWeights: [20, 15, 6, 1]
     readonly property int barCount: 2 * Math.max(1, Math.floor(width / (16 * pixelScale)))
     readonly property string style: settings.visualizerStyle
@@ -70,33 +67,11 @@ Item {
         return level;
     }
 
-    function receiveFrame(line) {
-        if (!/^(?:\d+;)*\d+;?$/.test(line))
-            return;
-        const values = line.split(";");
-        if (values[values.length - 1] === "")
-            values.pop();
-        if (values.length !== bandCount)
-            return;
-
-        // The audio analyzer supplies the gain and falloff.
-        const frame = values.map(value => Math.min(1, Number(value) / 1000));
-        const max = Math.max(...frame);
-        if (max === 0 && peak === 0 && spectrum.length)
-            return;
-        peak = max;
-        spectrum = frame;
-    }
-
-    Process {
-        running: root.captureAudio && root.visible
-        command: ["python3", decodeURIComponent(Qt.resolvedUrl("../../scripts/lockscreen_spectrum.py").toString().replace(/^file:\/\//, ""))]
-        stdout: SplitParser {
-            onRead: line => root.receiveFrame(line)
-        }
-        onExited: {
-            root.peak = 0;
-            root.spectrum = [];
+    Loader {
+        active: root.captureAudio && root.visible
+        sourceComponent: Item {
+            Component.onCompleted: LockscreenSpectrum.consumers++
+            Component.onDestruction: LockscreenSpectrum.consumers--
         }
     }
 
@@ -106,7 +81,7 @@ Item {
         renderScale: root.pixelScale
     }
 
-    onSpectrumChanged: graph.requestPaint()
+    onSpectrumChanged: if (visible && !sample) graph.requestPaint()
     onGraphColorChanged: graph.requestPaint()
     onStyleChanged: graph.requestPaint()
     onPixelScaleChanged: graph.requestPaint()
@@ -170,7 +145,7 @@ Item {
             const innerRadius = diameter * 0.34;
             const outerLimit = (diameter - lineWidth) / 2;
 
-            if (root.peak > 0 || root.sample) {
+            if (root.spectrum.length > 0 || root.sample) {
                 const pointCount = 128;
                 const points = [];
                 for (let index = 0; index < pointCount; index++) {

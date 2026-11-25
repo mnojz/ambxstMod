@@ -243,7 +243,7 @@ Item {
                         }
 
                         onAccepted: {
-                            if (passwordInput.text.trim() === "")
+                            if (passwordInput.length === 0)
                                 return;
 
                             const password = passwordInput.text;

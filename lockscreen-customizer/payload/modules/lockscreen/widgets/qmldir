@@ -1,0 +1,10 @@
+LockscreenClock 1.0 LockscreenClock.qml
+LockscreenClockFace 1.0 LockscreenClockFace.qml
+LockscreenLogin 1.0 LockscreenLogin.qml
+LockscreenMedia 1.0 LockscreenMedia.qml
+LockscreenShortcut 1.0 LockscreenShortcut.qml
+LockscreenVisualizer 1.0 LockscreenVisualizer.qml
+LockscreenWidgetShadow 1.0 LockscreenWidgetShadow.qml
+MediaButton 1.0 MediaButton.qml
+MediaPlayerSelector 1.0 MediaPlayerSelector.qml
+singleton LockscreenSpectrum 1.0 LockscreenSpectrum.qml
